@@ -536,7 +536,11 @@ class CardSet extends React.Component {
                 type: 'ADD_FORM',
                 data: {
                     fields: this.props.emptyForm.fields,
-                    extra: {},
+                    extra: {
+                        image: {
+                            title: ''
+                        }
+                    },
                     errors: {},
                     isNew: true,
                     hasChanged: true,
