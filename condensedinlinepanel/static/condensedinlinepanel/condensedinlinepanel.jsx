@@ -490,7 +490,7 @@ class CardSet extends React.Component {
             };
 
             // Get summary text
-            let summaryText = $(`#${this.props.formsetPrefix}-${form.id.toString()}-image-chooser .preview-image img`).attr('alt') || form.extra.image.title;
+            let summaryText = $(`#${this.props.formsetPrefix}-${form.id.toString()}-image-chooser .preview-image img`).attr('alt') || (form.extra ? (form.extra.image ? form.extra.image.title : null) : null) || "";
 
             // Render the card component
             renderedCards.push(<Card key={form.id}
