@@ -635,10 +635,13 @@ var CondensedInlinePanel =
 	                    return false;
 	                };
 
+	                // Get summary text
+	                var summaryText = $('#' + _this5.props.formsetPrefix + '-' + form.id.toString() + '-image-chooser .preview-image img').attr('alt') || (form.extra ? form.extra.image ? form.extra.image.title : null : null) || "";
+
 	                // Render the card component
 	                renderedCards.push(React.createElement(Card, { key: form.id,
 	                    formId: form.id,
-	                    summaryText: form.fields[_this5.props.summaryTextField],
+	                    summaryText: summaryText,
 	                    canEdit: _this5.props.canEdit,
 	                    canDelete: _this5.props.canDelete,
 	                    canOrder: _this5.props.canOrder,
@@ -683,7 +686,11 @@ var CondensedInlinePanel =
 	                    type: 'ADD_FORM',
 	                    data: {
 	                        fields: _this5.props.emptyForm.fields,
-	                        extra: {},
+	                        extra: {
+	                            image: {
+	                                title: ''
+	                            }
+	                        },
 	                        errors: {},
 	                        isNew: true,
 	                        hasChanged: true,
