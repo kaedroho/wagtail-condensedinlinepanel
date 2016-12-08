@@ -3,6 +3,7 @@ import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import {DragSource, DropTarget, DragDropContext} from 'react-dnd';
 import HTML5Backend from 'react-dnd-html5-backend';
+import * as $ from 'jquery';
 
 
 interface FieldError {
@@ -634,7 +635,7 @@ class CardSet extends React.Component<CardSetProps, {}> {
             };
 
             // Get summary text
-            let summaryText = $(`#${this.props.formsetPrefix}-${form.id.toString()}-image-chooser .preview-image img`).attr('alt') || (form.extra ? (form.extra.image ? form.extra.image.title : null) : null) || "";
+            let summaryText = $(`#${this.props.formsetPrefix}-${form.id.toString()}-image-chooser .preview-image img`).attr('alt') || (form.extra ? (form.extra['image'] ? form.extra['image'].title : null) : null) || "";
 
             // Render the card component
             renderedCards.push(<DraggableCard key={form.id}
