@@ -1,11 +1,83 @@
-import {createStore} from 'redux';
+import {createStore, Store} from 'redux';
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import {DragSource, DropTarget, DragDropContext} from 'react-dnd';
 import HTML5Backend from 'react-dnd-html5-backend';
 
 
-export function reducer(state=null, action) {
+interface FieldError {
+    code: string,
+    message: string,
+}
+
+
+interface Form {
+    // The ID assigned by Wagtail
+    // Note: Not the same as the primary key of the object
+    id: number,
+
+    // Is the form being edited (aka. is it expanded?)
+    isEditing: boolean,
+
+    // Was the form created in this session?
+    isNew: boolean,
+
+    // Has the form been deleted in this session?
+    isDeleted: boolean,
+
+    // Has the form been changed in this session?
+    hasChanged: boolean,
+
+    // The current position of the form in the panel (1 based)
+    position: number,
+
+    // The field data. Mapping of field names to values
+    fields: {[name: string]: string;},
+
+    // Extra data about specific fields
+    // This includes useful stuff such as the title of a linked document or the source an image
+    extra: {[name: string]: any;},
+
+    // Field errors. Mapping of field names to list of errors
+    errors: {[name: string]: FieldError[];},
+}
+
+
+interface State {
+    // List of all the forms in this session, including deleted and new forms
+    forms: Form[],
+
+    // A form instance to copy when creating new forms. Has default values pre-filled
+    emptyForm: Form,
+}
+
+
+interface SetStateAction {
+    type: "SET_STATE",
+    state: string,
+}
+
+interface SetFormAction {
+    type: "SET_FORM",
+    formId: number,
+    data: Form,
+}
+
+interface AddFormAction {
+    type: "ADD_FORM",
+    data: Form,
+}
+
+interface MoveFormAction {
+    type: "MOVE_FORM",
+    formId: number,
+    position: number,
+}
+
+type Action = SetStateAction | SetFormAction | AddFormAction | MoveFormAction;
+
+
+export function reducer(state: string|null = null, action: Action): string|null {
     if (action.type == 'SET_STATE') {
         return action.state;
     } else if (state == null) {
@@ -13,18 +85,18 @@ export function reducer(state=null, action) {
         return null;
     }
 
-    let deserialisedState = JSON.parse(state);
+    let deserializedState: State = JSON.parse(state);
 
     if (action.type == 'SET_FORM') {
-        deserialisedState.forms[action.formId] = action.data;
+        deserializedState.forms[action.formId] = action.data;
     }
 
     if (action.type == 'ADD_FORM') {
-        deserialisedState.forms.push(action.data);
+        deserializedState.forms.push(action.data);
     }
 
     if (action.type == 'MOVE_FORM') {
-        let movedForm = deserialisedState.forms[action.formId];
+        let movedForm = deserializedState.forms[action.formId];
         movedForm.hasChanged = true;
         let previousPosition = movedForm.position;
         let newPosition = action.position;
@@ -32,10 +104,10 @@ export function reducer(state=null, action) {
         movedForm.position = newPosition;
 
         // Update sort orders of all other forms
-        for (let i = 0; i < deserialisedState.forms.length; i++) {
+        for (let i = 0; i < deserializedState.forms.length; i++) {
             if (i == action.formId) continue;
 
-            let form = deserialisedState.forms[i];
+            let form = deserializedState.forms[i];
 
             // Forms after the previous position move up one
             if (form.position >= previousPosition) {
@@ -49,11 +121,48 @@ export function reducer(state=null, action) {
         }
     }
 
-    return JSON.stringify(deserialisedState);
+    return JSON.stringify(deserializedState);
 }
 
 
-class Card extends React.Component {
+type customiseActionsFn = (props: CardProps, actions: any[]) => void;
+type onAddFn = (position: number) => void;
+type onEditStartFn = (e: MouseEvent) => boolean;
+type onEditCloseFn = (e: MouseEvent, newFields: {[name: string]: any;}) => boolean;
+type onDeleteFn = (e: MouseEvent) => boolean;
+type onDNDFn = (formId: number, position: number) => void;
+
+
+interface CardProps {
+    formId: number,
+    summaryText: string,
+    canEdit: boolean,
+    canDelete: boolean,
+    canOrder: boolean,
+    template: string,
+    formPrefix: string,
+    fields: {[name: string]: any;},
+    extra: {[name: string]: any;},
+    errors: {[name: string]: FieldError[];},
+    deleted: boolean,
+    isEditing: boolean,
+    isNew: boolean,
+    hasChanged: boolean,
+    customiseActions: customiseActionsFn,
+    onEditStart: onEditStartFn,
+    onEditClose: onEditCloseFn
+    onDelete: onDeleteFn,
+    dndKey: string,
+    connectDragSource: any,
+    isDragging: boolean,
+}
+
+
+interface CardState {
+    showDeleteConfirm: boolean
+}
+
+class Card extends React.Component<CardProps, CardState> {
     /*
      * This component represents an individual object in the panel
      *
@@ -91,7 +200,7 @@ class Card extends React.Component {
      *  - onEditClose: Fired when the user clicks the "close" button in the form
      */
 
-    constructor(props) {
+    constructor(props: CardProps) {
         super(props);
 
         this.state = {
@@ -101,7 +210,7 @@ class Card extends React.Component {
 
     getFormHtml() {
         return {
-            __html: this.props.template.replace(/__prefix__/g, this.props.formId)
+            __html: this.props.template.replace(/__prefix__/g, this.props.formId.toString())
         };
     }
 
@@ -116,7 +225,10 @@ class Card extends React.Component {
         // Copy field data into the form
         for (let fieldName in this.props.fields) {
             let fieldElement = document.getElementById(`${this.props.formPrefix}-${fieldName}`);
-            fieldElement.value = this.props.fields[fieldName]
+
+            if (fieldElement instanceof HTMLInputElement) {
+                fieldElement.value = this.props.fields[fieldName]
+            }
         }
 
         // Add errors
@@ -171,10 +283,12 @@ class Card extends React.Component {
 
                 // Preview image
                 let previewImage = imageChooser.querySelector('.preview-image img');
-                previewImage.src = this.props.extra[fieldName]['preview_image'].src;
-                previewImage.alt = this.props.extra[fieldName]['preview_image'].alt;
-                previewImage.width = this.props.extra[fieldName]['preview_image'].width;
-                previewImage.height = this.props.extra[fieldName]['preview_image'].height;
+                if (previewImage instanceof HTMLImageElement) {
+                    previewImage.src = this.props.extra[fieldName]['preview_image'].src;
+                    previewImage.alt = this.props.extra[fieldName]['preview_image'].alt;
+                    previewImage.width = this.props.extra[fieldName]['preview_image'].width;
+                    previewImage.height = this.props.extra[fieldName]['preview_image'].height;
+                }
             }
         }
     }
@@ -190,22 +304,25 @@ class Card extends React.Component {
 
     // Actions
 
-    onEditStart(e) {
+    onEditStart(e: MouseEvent) {
         return this.props.onEditStart(e);
     }
 
-    onEditClose(e) {
-        let newFields = {};
+    onEditClose(e: MouseEvent) {
+        let newFields: {[name: string]: string;} = {};
 
         for (let fieldName in this.props.fields) {
             let fieldElement = document.getElementById(`${this.props.formPrefix}-${fieldName}`);
-            newFields[fieldName] = fieldElement.value;
+
+            if (fieldElement instanceof HTMLInputElement) {
+                newFields[fieldName] = fieldElement.value;
+            }
         }
 
         return this.props.onEditClose(e, newFields);
     }
 
-    onDelete(e) {
+    onDelete(e: MouseEvent) {
         this.state.showDeleteConfirm = true;
         this.setState(this.state);
 
@@ -213,7 +330,7 @@ class Card extends React.Component {
         return false;
     }
 
-    onDeleteCancel(e) {
+    onDeleteCancel(e: MouseEvent) {
         this.state.showDeleteConfirm = false;
         this.setState(this.state);
 
@@ -221,11 +338,11 @@ class Card extends React.Component {
         return false;
     }
 
-    onDeleteConfirm(e) {
+    onDeleteConfirm(e: MouseEvent) {
         return this.props.onDelete(e);
     }
 
-    renderActions(onEditClose) {
+    renderActions() {
         /* Renders the action buttons that appear on the right side of the header */
         let actions = [];
 
@@ -315,7 +432,7 @@ class Card extends React.Component {
         </div>;
     }
 
-    componentDidUpdate(prevProps, prevState) {
+    componentDidUpdate(prevProps: CardProps, prevState: CardState) {
         // If the form has just been rendered, run initialiseForm
         if (this.shouldRenderForm() && !this.shouldRenderForm(prevProps)) {
             this.initialiseForm();
@@ -331,33 +448,43 @@ class Card extends React.Component {
 }
 
 let dragSource = {
-    canDrag(props, monitor) {
+    canDrag(props: CardProps, monitor: any) {
         return props.canOrder;
     },
-    beginDrag(props, monitor, component) {
+    beginDrag(props: CardProps, monitor: any, component: any) {
         return {
             formId: props.formId
         };
     }
 }
 
-function dragSourceCollect(connect, monitor) {
+function dragSourceCollect(connect: any, monitor: any) {
     return {
         connectDragSource: connect.dragSource(),
         isDragging: monitor.isDragging(),
     };
 }
 
-Card = DragSource((props) => props.dndKey, dragSource, dragSourceCollect)(Card);
+
+// FIXME: Had to remove type because of https://github.com/gaearon/react-dnd/issues/581
+let DraggableCard: any = DragSource((props) => props.dndKey, dragSource, dragSourceCollect)(Card);
 
 
-class Gap extends React.Component {
+interface GapProps {
+    position: number,
+    onAdd: onAddFn,
+    isOver: boolean
+    onDND: onDNDFn,
+    connectDropTarget: any,
+}
+
+class Gap extends React.Component<GapProps, {}> {
     /*
      * This component fills the gap between cards and is used as a drop target
      * and a place for the "add new" button
     */
 
-    drop(formId) {
+    drop(formId: number) {
         this.props.onDND(formId, this.props.position);
     }
 
@@ -372,7 +499,7 @@ class Gap extends React.Component {
                       <div className="condensed-inline-panel__gap-pseudoform" />
                   </div>;
         } else {
-            let onAdd = (e) => {
+            let onAdd = (e: any) => {
                 this.props.onAdd(this.props.position);
 
                 e.preventDefault();
@@ -392,36 +519,53 @@ class Gap extends React.Component {
 }
 
 let dropTarget = {
-    drop(props, monitor, component) {
+    drop(props: any, monitor: any, component: any) {
+        console.log(props)
         component.drop(monitor.getItem().formId);
     }
 };
 
-function dropTargetCollect(connect, monitor) {
+function dropTargetCollect(connect: any, monitor: any) {
     return {
         connectDropTarget: connect.dropTarget(),
         isOver: monitor.canDrop() && monitor.isOver(),
     };
 }
 
-Gap = DropTarget((props) => props.dndKey, dropTarget, dropTargetCollect)(Gap);
+let DroppableGap = DropTarget((props) => props.dndKey, dropTarget, dropTargetCollect)(Gap);
 
 
-class CardSet extends React.Component {
-    initGaps(forms, onDND, onAdd) {
+interface CardSetProps {
+    forms: Form[],
+    sortCompareFunc: (a: Form, b: Form) => 1 | 0 | -1,
+    store: Store<string>,
+    dndKey: string,
+    formsetPrefix: string,
+    summaryTextField: string,
+    canEdit: boolean,
+    canDelete: boolean,
+    canOrder: boolean,
+    formTemplate: string,
+    customiseCardActions: customiseActionsFn,
+    onDND: onDNDFn,
+    emptyForm: Form,
+}
+
+class CardSet extends React.Component<CardSetProps, {}> {
+    initGaps(forms: any[], onDND: onDNDFn, onAdd: onAddFn) {
         /* Injects Gap components into an array of rendered cards */
 
         let positionId = 1;
         let newForms = [];
 
         // Add the top gap
-        newForms.push(<Gap key={'gap-' + positionId} position={positionId++} dndKey={this.props.dndKey||this.props.formsetPrefix} onDND={onDND} onAdd={onAdd} />);
+        newForms.push(<DroppableGap key={'gap-' + positionId} position={positionId++} dndKey={this.props.dndKey||this.props.formsetPrefix} onDND={onDND} onAdd={onAdd} />);
 
         for (let i = 0; i < forms.length; i++) {
             newForms.push(forms[i]);
 
             // Add a gap
-            newForms.push(<Gap key={'gap-' + positionId} position={positionId++} dndKey={this.props.dndKey||this.props.formsetPrefix} onDND={onDND} onAdd={onAdd} />);
+            newForms.push(<DroppableGap key={'gap-' + positionId} position={positionId++} dndKey={this.props.dndKey||this.props.formsetPrefix} onDND={onDND} onAdd={onAdd} />);
         }
 
         return newForms;
@@ -442,7 +586,7 @@ class CardSet extends React.Component {
 
             // Event handlers
 
-            let onEditStart = (e) => {
+            let onEditStart = (e: MouseEvent) => {
                 /* Fired when the user clicks the "edit" button on the card */
 
                 // Start editing the card
@@ -458,7 +602,7 @@ class CardSet extends React.Component {
                 return false;
             };
 
-            let onDelete = (e) => {
+            let onDelete = (e: MouseEvent) => {
                 /* Fired when the user clicks the "delete" button on the card */
 
                 // Set "DELETE" field
@@ -473,7 +617,7 @@ class CardSet extends React.Component {
                 return false;
             };
 
-            let onEditClose = (e, newFields) => {
+            let onEditClose = (e: MouseEvent, newFields: {[name: string]: string;}) => {
                 /* Fired when the user clicks the "close" button in the form */
 
                 // Save the form data
@@ -493,7 +637,7 @@ class CardSet extends React.Component {
             let summaryText = $(`#${this.props.formsetPrefix}-${form.id.toString()}-image-chooser .preview-image img`).attr('alt') || (form.extra ? (form.extra.image ? form.extra.image.title : null) : null) || "";
 
             // Render the card component
-            renderedCards.push(<Card key={form.id}
+            renderedCards.push(<DraggableCard key={form.id}
                                      formId={form.id}
                                      summaryText={summaryText}
                                      canEdit={this.props.canEdit}
@@ -526,7 +670,7 @@ class CardSet extends React.Component {
             });
         });
 
-        let onAdd = (position) => {
+        let onAdd = (position: number) => {
             /* Fired when the user clicks the "add new" button */
 
             let formId = this.props.forms.length;
@@ -564,13 +708,13 @@ class CardSet extends React.Component {
         // Create an add button if the form isn't orderable
         let addButton = null;
         if (this.props.canEdit) {
-            let onClickAddButton = (e) => {
+            let onClickAddButton = (e: any) => {
                 onAdd(1);
 
                 e.preventDefault();
                 return false;
             };
-            addButton = <button className="condensed-inline-panel__top-add-button bicolor icon icon-plus" type="button" onClick={onClickAddButton}>Add</button>;
+            addButton = <button className="condensed-inline-panel__top-add-button button bicolor icon icon-plus" type="button" onClick={onClickAddButton}>Add</button>;
         }
 
         return <div>
@@ -580,11 +724,19 @@ class CardSet extends React.Component {
     }
 }
 
-CardSet = DragDropContext(HTML5Backend)(CardSet);
+// FIXME: Had to remove type because of https://github.com/gaearon/react-dnd/issues/581
+let DNDCardSet: any = DragDropContext(HTML5Backend)(CardSet);
 
 export {Card, CardSet};
 
-export function init(id, options={}) {
+interface Options {
+    canEdit?: boolean,
+    canDelete?: boolean,
+    canOrder?: boolean,
+    summaryTextField?: string,
+}
+
+export function init(id: string, options: Options = {}) {
     const canEdit = options['canEdit'] || true;
     const canDelete = options['canDelete'] || canEdit;
     const canOrder = options['canOrder'] || false;
@@ -598,7 +750,7 @@ export function init(id, options={}) {
 
     let store = createStore(reducer);
 
-    let sortCompareFunc = (a, b) => {
+    let sortCompareFunc = (a: Form, b: Form) => {
         if (a.position > b.position) {
             return 1;
         } else if (a.position < b.position) {
@@ -610,15 +762,15 @@ export function init(id, options={}) {
 
     // Rerender component when state changes
     store.subscribe(() => {
-        let state = JSON.parse(store.getState());
-        ReactDOM.render(<CardSet forms={state.forms}
+        let state: State = JSON.parse(store.getState());
+        ReactDOM.render(<DNDCardSet forms={state.forms}
                                  summaryTextField={summaryTextField}
                                  canEdit={canEdit}
                                  canDelete={canDelete}
                                  canOrder={canOrder}
                                  store={store}
                                  emptyForm={state.emptyForm}
-                                 formTemplate={element.dataset.formTemplate}
+                                 formTemplate={element.dataset['formTemplate']}
                                  formsetPrefix={id}
                                  sortCompareFunc={sortCompareFunc} />, uiContainer);
     });
@@ -627,21 +779,23 @@ export function init(id, options={}) {
     if (canOrder) {
         let sortOrderField = element.getElementsByClassName('condensed-inline-panel__sort-order')[0];
         store.subscribe(() => {
-            let state = JSON.parse(store.getState());
+            let state: State = JSON.parse(store.getState());
             let sortOrders = [];
 
             for (let i = 0; i< state.forms.length; i++) {
                 sortOrders.push(state.forms[i].position);
             }
 
-            sortOrderField.value = JSON.stringify(sortOrders);
+            if (sortOrderField instanceof HTMLInputElement) {
+                sortOrderField.value = JSON.stringify(sortOrders);
+            }
         });
     }
 
     // Keep delete field up to date
     let deleteField = element.getElementsByClassName('condensed-inline-panel__delete')[0];
     store.subscribe(() => {
-        let state = JSON.parse(store.getState());
+        let state: State = JSON.parse(store.getState());
         let deletedForms = [];
 
         for (let i = 0; i< state.forms.length; i++) {
@@ -650,18 +804,25 @@ export function init(id, options={}) {
             }
         }
 
-        deleteField.value = JSON.stringify(deletedForms);
+        if (deleteField instanceof HTMLInputElement) {
+            deleteField.value = JSON.stringify(deletedForms);
+        }
     });
 
     // Set initial state
-    store.dispatch({
-        type: 'SET_STATE',
-        state: dataField.value,
-    });
+    if (dataField instanceof HTMLInputElement) {
+        store.dispatch({
+            type: 'SET_STATE',
+            state: dataField.value,
+        });
+    }
 
     // Update TOTAL_FORMS when the number of forms changes
     store.subscribe(() => {
-        let state = JSON.parse(store.getState());
-        totalFormsField.value = state.forms.length;
+        let state: State = JSON.parse(store.getState());
+
+        if (totalFormsField instanceof HTMLInputElement) {
+            totalFormsField.value = state.forms.length.toString();
+        }
     });
 }
