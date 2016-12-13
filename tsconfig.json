@@ -3,11 +3,17 @@
         "outDir": "./condensedinlinepanel/static/condensedinlinepanel/compiled/",
         "sourceMap": true,
         "noImplicitAny": true,
+        "strictNullChecks": true,
         "module": "commonjs",
         "target": "es5",
         "jsx": "react"
     },
     "files": [
-        "./condensedinlinepanel/static/condensedinlinepanel/condensedinlinepanel.tsx"
+        "./condensedinlinepanel/static/condensedinlinepanel/src/condensedinlinepanel.tsx",
+        "./condensedinlinepanel/static/condensedinlinepanel/src/types.ts",
+        "./condensedinlinepanel/static/condensedinlinepanel/src/state.ts",
+        "./condensedinlinepanel/static/condensedinlinepanel/src/components/Card.tsx",
+        "./condensedinlinepanel/static/condensedinlinepanel/src/components/Gap.tsx",
+        "./condensedinlinepanel/static/condensedinlinepanel/src/components/CardSet.tsx"
     ]
 }

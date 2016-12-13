@@ -46,503 +46,31 @@ var CondensedInlinePanel =
 /***/ function(module, exports, __webpack_require__) {
 
 	"use strict";
-	var __extends = (this && this.__extends) || function (d, b) {
-	    for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
-	    function __() { this.constructor = d; }
-	    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-	};
 	var redux_1 = __webpack_require__(1);
 	var React = __webpack_require__(23);
 	var ReactDOM = __webpack_require__(53);
-	var react_dnd_1 = __webpack_require__(199);
-	var react_dnd_html5_backend_1 = __webpack_require__(320);
-	var $ = __webpack_require__(352);
-	function reducer(state, action) {
-	    if (state === void 0) { state = null; }
-	    if (action.type == 'SET_STATE') {
-	        return action.state;
-	    }
-	    else if (state == null) {
-	        // Ignore everything until we get an initial state
-	        return null;
-	    }
-	    var deserializedState = JSON.parse(state);
-	    if (action.type == 'SET_FORM') {
-	        deserializedState.forms[action.formId] = action.data;
-	    }
-	    if (action.type == 'ADD_FORM') {
-	        deserializedState.forms.push(action.data);
-	    }
-	    if (action.type == 'MOVE_FORM') {
-	        var movedForm = deserializedState.forms[action.formId];
-	        movedForm.hasChanged = true;
-	        var previousPosition = movedForm.position;
-	        var newPosition = action.position;
-	        if (newPosition > previousPosition)
-	            newPosition--;
-	        movedForm.position = newPosition;
-	        // Update sort orders of all other forms
-	        for (var i = 0; i < deserializedState.forms.length; i++) {
-	            if (i == action.formId)
-	                continue;
-	            var form = deserializedState.forms[i];
-	            // Forms after the previous position move up one
-	            if (form.position >= previousPosition) {
-	                form.position--;
-	            }
-	            // Forms after the new position move down one
-	            if (form.position >= newPosition) {
-	                form.position++;
-	            }
-	        }
-	    }
-	    return JSON.stringify(deserializedState);
-	}
-	exports.reducer = reducer;
-	var Card = (function (_super) {
-	    __extends(Card, _super);
-	    /*
-	     * This component represents an individual object in the panel
-	     *
-	     * When not being edited, this displays a card to the user
-	     * When being edited, it expands into a form interface
-	     *
-	     * props:
-	     *  - formId: The number of the form (as assigned by Wagtail)
-	     *  - summaryText: The text to show at the top
-	     *  - canEdit: (boolean)  Set to true if this card can be edited
-	     *  - canDelete: (boolean) Set to true if this card can be deleted
-	     *  - canOrder: (boolean) Set to true if this card can be moved
-	     *  - template: A HTML template to use for the form
-	     *  - formPrefix: The prefix appeneded to the beginning of the id of each field
-	     *  - fields: Mapping of field names to their current values
-	     *  - extra: Any extra data that might be useful for rendering fields (eg, title of chosen page)
-	     *  - errors: A mapping of field names to a list of errors
-	     *  - deleted: (boolean). Set when the card has been deleted
-	     *  - isEditing: (boolean). Set when this card is being edited (displays the expanded form)
-	     *  - isNew: (boolean). Set when this card has been created in this session
-	     *  - hasChanged (boolean). Set when this card has been changed in this session
-	     *  - customiseActions. A hook to allow the action buttons to be customised.
-	     *    The props are passed through in the first argument and the list of actions
-	     *    in the second argument
-	     *  - dndKey: A key to pass to react-dnd which is different for each cardset.
-	     *    This prevents cards from being ordered across different sets.
-	     *
-	     * The following props are added by react-dnd:
-	     *  - connectDragSource: Used to hook in react-dnd
-	     *  - isDragging: (boolean) Set when this card is being dragged
-	     *
-	     * events:
-	     *  - onEditStart: Fired when the user clicks the "edit" button on the card
-	     *  - onDelete: Fired when the user clicks the "delete" button on the card
-	     *  - onEditClose: Fired when the user clicks the "close" button in the form
-	     */
-	    function Card(props) {
-	        var _this = _super.call(this, props) || this;
-	        _this.state = {
-	            showDeleteConfirm: false,
-	        };
-	        return _this;
-	    }
-	    Card.prototype.getFormHtml = function () {
-	        return {
-	            __html: this.props.template.replace(/__prefix__/g, this.props.formId.toString())
-	        };
-	    };
-	    Card.prototype.initialiseForm = function () {
-	        /* Called just after the form has been inserted into the DOM, this
-	        initialises all of the componenents in the form */
-	        // Find form element
-	        var reactElement = ReactDOM.findDOMNode(this);
-	        var formElement = reactElement.getElementsByClassName('condensed-inline-panel__form')[0];
-	        // Copy field data into the form
-	        for (var fieldName in this.props.fields) {
-	            var fieldElement = document.getElementById(this.props.formPrefix + "-" + fieldName);
-	            if (fieldElement instanceof HTMLInputElement) {
-	                fieldElement.value = this.props.fields[fieldName];
-	            }
-	        }
-	        // Add errors
-	        for (var fieldName in this.props.errors) {
-	            var fieldWrapper = document.getElementById(this.props.formPrefix + "-" + fieldName).closest('.field');
-	            fieldWrapper.classList.add('error');
-	            // Append error text to field content
-	            var fieldContent = fieldWrapper.getElementsByClassName('field-content')[0] || fieldWrapper;
-	            var errors = document.createElement('p');
-	            errors.classList.add('error-message');
-	            errors.innerHTML = "<span>" + this.props.errors[fieldName].map(function (error) { return error.message; }).join(' ') + "</span>";
-	            fieldContent.appendChild(errors);
-	        }
-	        // Run any script tags embedded in the form HTML
-	        var scriptTags = formElement.getElementsByTagName('script');
-	        for (var i = 0; i < scriptTags.length; i++) {
-	            var scriptTag = scriptTags.item(i);
-	            eval(scriptTag.innerHTML);
-	        }
-	        // HACK: Make page choosers work
-	        var pageChoosers = formElement.getElementsByClassName('page-chooser');
-	        for (var i = 0; i < pageChoosers.length; i++) {
-	            var pageChooser = pageChoosers.item(i);
-	            var fieldName = pageChooser.id.match(/id_[^-]*-\d+-([^-]*)-chooser/)[1];
-	            if (this.props.fields[fieldName]) {
-	                // Field has a value!
-	                // Remove blank class
-	                pageChooser.classList.remove('blank');
-	                // Set title
-	                pageChooser.getElementsByClassName('title')[0].textContent = this.props.extra[fieldName]['title'];
-	            }
-	        }
-	        // HACK: Make image choosers work
-	        var imageChoosers = formElement.getElementsByClassName('image-chooser');
-	        for (var i = 0; i < imageChoosers.length; i++) {
-	            var imageChooser = imageChoosers.item(i);
-	            var fieldName = imageChooser.id.match(/id_[^-]*-\d+-([^-]*)-chooser/)[1];
-	            if (this.props.fields[fieldName]) {
-	                // Field has a value!
-	                // Remove blank class
-	                imageChooser.classList.remove('blank');
-	                // Preview image
-	                var previewImage = imageChooser.querySelector('.preview-image img');
-	                if (previewImage instanceof HTMLImageElement) {
-	                    previewImage.src = this.props.extra[fieldName]['preview_image'].src;
-	                    previewImage.alt = this.props.extra[fieldName]['preview_image'].alt;
-	                    previewImage.width = this.props.extra[fieldName]['preview_image'].width;
-	                    previewImage.height = this.props.extra[fieldName]['preview_image'].height;
-	                }
-	            }
-	        }
-	    };
-	    Card.prototype.shouldRenderForm = function (props) {
-	        /* Returns true if we need the form HTML to be rendered in the DOM */
-	        if (props === void 0) { props = this.props; }
-	        // Note, we still need the form HTML when the form has been edited/deleted
-	        // so the changes get submitted back to Wagtail
-	        return (props.isEditing || props.hasChanged || props.deleted) && props.canEdit;
-	    };
-	    // Actions
-	    Card.prototype.onEditStart = function (e) {
-	        return this.props.onEditStart(e);
-	    };
-	    Card.prototype.onEditClose = function (e) {
-	        var newFields = {};
-	        for (var fieldName in this.props.fields) {
-	            var fieldElement = document.getElementById(this.props.formPrefix + "-" + fieldName);
-	            if (fieldElement instanceof HTMLInputElement) {
-	                newFields[fieldName] = fieldElement.value;
-	            }
-	        }
-	        return this.props.onEditClose(e, newFields);
-	    };
-	    Card.prototype.onDelete = function (e) {
-	        this.state.showDeleteConfirm = true;
-	        this.setState(this.state);
-	        e.preventDefault();
-	        return false;
-	    };
-	    Card.prototype.onDeleteCancel = function (e) {
-	        this.state.showDeleteConfirm = false;
-	        this.setState(this.state);
-	        e.preventDefault();
-	        return false;
-	    };
-	    Card.prototype.onDeleteConfirm = function (e) {
-	        return this.props.onDelete(e);
-	    };
-	    Card.prototype.renderActions = function () {
-	        /* Renders the action buttons that appear on the right side of the header */
-	        var actions = [];
-	        // Edit/close action
-	        if (this.props.canEdit) {
-	            if (this.props.isEditing) {
-	                actions.push(React.createElement("li", { key: "edit-close", onClick: this.onEditClose.bind(this), className: "condensed-inline-panel__action condensed-inline-panel__action-close icon icon-edit" }));
-	            }
-	            else {
-	                actions.push(React.createElement("li", { key: "edit-start", onClick: this.onEditStart.bind(this), className: "condensed-inline-panel__action condensed-inline-panel__action-edit icon icon-edit" }));
-	            }
-	        }
-	        // Delete action
-	        if (this.props.canDelete) {
-	            actions.push(React.createElement("li", { key: "delete", onClick: this.onDelete.bind(this), className: "condensed-inline-panel__action condensed-inline-panel__action-delete icon icon-bin" }));
-	        }
-	        // Custom actions
-	        if (this.props.customiseActions) {
-	            this.props.customiseActions(this.props, actions);
-	        }
-	        // Delete confirm hides all other actions
-	        if (this.props.canDelete && this.state.showDeleteConfirm) {
-	            actions = [
-	                React.createElement("li", { className: "condensed-inline-panel__delete-confirm-message" }, "Are you sure that you want to delete this?"),
-	                React.createElement("li", { key: "delete", onClick: this.onDeleteConfirm.bind(this), className: "condensed-inline-panel__action condensed-inline-panel__action-delete-confirm icon icon-tick" }),
-	                React.createElement("li", { key: "cancel", onClick: this.onDeleteCancel.bind(this), className: "condensed-inline-panel__action condensed-inline-panel__action-delete-confirm-cancel icon icon-cross" }),
-	            ];
-	        }
-	        return actions;
-	    };
-	    Card.prototype.getClassNames = function () {
-	        /* Returns a list of class names to add to the card */
-	        var classes = ['condensed-inline-panel__card'];
-	        if (Object.keys(this.props.errors).length > 0) {
-	            classes.push('condensed-inline-panel__card--errors');
-	        }
-	        if (this.props.isNew) {
-	            classes.push('condensed-inline-panel__card--new');
-	        }
-	        else if (this.props.hasChanged) {
-	            classes.push('condensed-inline-panel__card--changed');
-	        }
-	        if (this.props.deleted) {
-	            classes.push('condensed-inline-panel__card--deleted');
-	        }
-	        else if (this.props.isEditing) {
-	            classes.push('condensed-inline-panel__card--editing');
-	        }
-	        if (this.props.isDragging) {
-	            classes.push('condensed-inline-panel__card--dragging');
-	        }
-	        return classes;
-	    };
-	    Card.prototype.render = function () {
-	        var form = React.createElement("div", { className: "condensed-inline-panel__form" });
-	        if (this.shouldRenderForm()) {
-	            form = React.createElement("div", { className: "condensed-inline-panel__form", dangerouslySetInnerHTML: this.getFormHtml() });
-	        }
-	        var header = React.createElement("div", { className: "condensed-inline-panel__card-header" },
-	            React.createElement("ul", { className: "condensed-inline-panel__actions" }, this.renderActions()),
-	            React.createElement("h2", null, this.props.summaryText));
-	        // Hook into react dnd
-	        header = this.props.connectDragSource(header);
-	        return React.createElement("div", { className: this.getClassNames().join(' ') },
-	            header,
-	            form);
-	    };
-	    Card.prototype.componentDidUpdate = function (prevProps, prevState) {
-	        // If the form has just been rendered, run initialiseForm
-	        if (this.shouldRenderForm() && !this.shouldRenderForm(prevProps)) {
-	            this.initialiseForm();
-	        }
-	    };
-	    Card.prototype.componentDidMount = function () {
-	        // If the form has just been rendered, run initialiseForm
-	        if (this.shouldRenderForm()) {
-	            this.initialiseForm();
-	        }
-	    };
-	    return Card;
-	}(React.Component));
-	exports.Card = Card;
-	var dragSource = {
-	    canDrag: function (props, monitor) {
-	        return props.canOrder;
-	    },
-	    beginDrag: function (props, monitor, component) {
-	        return {
-	            formId: props.formId
-	        };
-	    }
-	};
-	function dragSourceCollect(connect, monitor) {
-	    return {
-	        connectDragSource: connect.dragSource(),
-	        isDragging: monitor.isDragging(),
-	    };
-	}
-	// FIXME: Had to remove type because of https://github.com/gaearon/react-dnd/issues/581
-	var DraggableCard = react_dnd_1.DragSource(function (props) { return props.dndKey; }, dragSource, dragSourceCollect)(Card);
-	var Gap = (function (_super) {
-	    __extends(Gap, _super);
-	    function Gap() {
-	        return _super.apply(this, arguments) || this;
-	    }
-	    /*
-	     * This component fills the gap between cards and is used as a drop target
-	     * and a place for the "add new" button
-	    */
-	    Gap.prototype.drop = function (formId) {
-	        this.props.onDND(formId, this.props.position);
-	    };
-	    Gap.prototype.render = function () {
-	        var _this = this;
-	        var classes = ['condensed-inline-panel__gap'];
-	        var gap = null;
-	        if (this.props.isOver) {
-	            classes.push('condensed-inline-panel__gap--over');
-	            gap = React.createElement("div", { className: classes.join(' ') },
-	                React.createElement("div", { className: "condensed-inline-panel__gap-pseudoform" }));
-	        }
-	        else {
-	            var onAdd = function (e) {
-	                _this.props.onAdd(_this.props.position);
-	                e.preventDefault();
-	                return false;
-	            };
-	            gap = React.createElement("div", { className: classes.join(' ') },
-	                React.createElement("a", { className: "condensed-inline-panel__add-button icon icon-plus-inverse", href: "#", onClick: onAdd }));
-	        }
-	        // Hook into react dnd
-	        gap = this.props.connectDropTarget(gap);
-	        return gap;
-	    };
-	    return Gap;
-	}(React.Component));
-	var dropTarget = {
-	    drop: function (props, monitor, component) {
-	        console.log(props);
-	        component.drop(monitor.getItem().formId);
-	    }
-	};
-	function dropTargetCollect(connect, monitor) {
-	    return {
-	        connectDropTarget: connect.dropTarget(),
-	        isOver: monitor.canDrop() && monitor.isOver(),
-	    };
-	}
-	var DroppableGap = react_dnd_1.DropTarget(function (props) { return props.dndKey; }, dropTarget, dropTargetCollect)(Gap);
-	var CardSet = (function (_super) {
-	    __extends(CardSet, _super);
-	    function CardSet() {
-	        return _super.apply(this, arguments) || this;
-	    }
-	    CardSet.prototype.initGaps = function (forms, onDND, onAdd) {
-	        /* Injects Gap components into an array of rendered cards */
-	        var positionId = 1;
-	        var newForms = [];
-	        // Add the top gap
-	        newForms.push(React.createElement(DroppableGap, { key: 'gap-' + positionId, position: positionId++, dndKey: this.props.dndKey || this.props.formsetPrefix, onDND: onDND, onAdd: onAdd }));
-	        for (var i = 0; i < forms.length; i++) {
-	            newForms.push(forms[i]);
-	            // Add a gap
-	            newForms.push(React.createElement(DroppableGap, { key: 'gap-' + positionId, position: positionId++, dndKey: this.props.dndKey || this.props.formsetPrefix, onDND: onDND, onAdd: onAdd }));
-	        }
-	        return newForms;
-	    };
-	    CardSet.prototype.render = function () {
-	        var _this = this;
-	        var renderedCards = [];
-	        // Sort the forms by their SORT field
-	        var sortedForms = this.props.forms.slice();
-	        if (this.props.sortCompareFunc) {
-	            sortedForms.sort(this.props.sortCompareFunc);
-	        }
-	        var _loop_1 = function (i) {
-	            var form = sortedForms[i];
-	            // Event handlers
-	            var onEditStart = function (e) {
-	                /* Fired when the user clicks the "edit" button on the card */
-	                // Start editing the card
-	                form.isEditing = true;
-	                form.hasChanged = true;
-	                _this.props.store.dispatch({
-	                    type: 'SET_FORM',
-	                    formId: form.id,
-	                    data: form,
-	                });
-	                e.preventDefault();
-	                return false;
-	            };
-	            var onDelete = function (e) {
-	                /* Fired when the user clicks the "delete" button on the card */
-	                // Set "DELETE" field
-	                form.isDeleted = true;
-	                _this.props.store.dispatch({
-	                    type: 'SET_FORM',
-	                    formId: form.id,
-	                    data: form,
-	                });
-	                e.preventDefault();
-	                return false;
-	            };
-	            var onEditClose = function (e, newFields) {
-	                /* Fired when the user clicks the "close" button in the form */
-	                // Save the form data
-	                form.isEditing = false;
-	                form.fields = newFields;
-	                _this.props.store.dispatch({
-	                    type: 'SET_FORM',
-	                    formId: form.id,
-	                    data: form,
-	                });
-	                e.preventDefault();
-	                return false;
-	            };
-	            // Get summary text
-	            var summaryText = $("#" + this_1.props.formsetPrefix + "-" + form.id.toString() + "-image-chooser .preview-image img").attr('alt') || (form.extra ? (form.extra['image'] ? form.extra['image'].title : null) : null) || "";
-	            // Render the card component
-	            renderedCards.push(React.createElement(DraggableCard, { key: form.id, formId: form.id, summaryText: summaryText, canEdit: this_1.props.canEdit, canDelete: this_1.props.canDelete, canOrder: this_1.props.canOrder, template: this_1.props.formTemplate, formPrefix: this_1.props.formsetPrefix + "-" + form.id.toString(), fields: form.fields, extra: form.extra, errors: form.errors, deleted: form.isDeleted || false, isEditing: form.isEditing || false, isNew: form.isNew || false, hasChanged: form.hasChanged || false, customiseActions: this_1.props.customiseCardActions, dndKey: this_1.props.dndKey || this_1.props.formsetPrefix, onEditStart: onEditStart, onEditClose: onEditClose, onDelete: onDelete }));
-	        };
-	        var this_1 = this;
-	        for (var i in sortedForms) {
-	            _loop_1(i);
-	        }
-	        // The DND event handler
-	        var onDND = this.props.onDND || (function (formId, position) {
-	            /* Called when a drag and drop action has been performed */
-	            _this.props.store.dispatch({
-	                type: 'MOVE_FORM',
-	                formId: formId,
-	                position: position,
-	            });
-	        });
-	        var onAdd = function (position) {
-	            /* Fired when the user clicks the "add new" button */
-	            var formId = _this.props.forms.length;
-	            // Create the form
-	            _this.props.store.dispatch({
-	                type: 'ADD_FORM',
-	                data: {
-	                    fields: _this.props.emptyForm.fields,
-	                    extra: {
-	                        image: {
-	                            title: ''
-	                        }
-	                    },
-	                    errors: {},
-	                    isNew: true,
-	                    hasChanged: true,
-	                    isEditing: true,
-	                    position: _this.props.forms.length + 1,
-	                    id: formId,
-	                }
-	            });
-	            // Move it into position
-	            _this.props.store.dispatch({
-	                type: 'MOVE_FORM',
-	                formId: formId,
-	                position: position,
-	            });
-	        };
-	        // Add gap objects into the cards
-	        renderedCards = this.initGaps(renderedCards, onDND, onAdd);
-	        // Create an add button if the form isn't orderable
-	        var addButton = null;
-	        if (this.props.canEdit) {
-	            var onClickAddButton = function (e) {
-	                onAdd(1);
-	                e.preventDefault();
-	                return false;
-	            };
-	            addButton = React.createElement("button", { className: "condensed-inline-panel__top-add-button button bicolor icon icon-plus", type: "button", onClick: onClickAddButton }, "Add");
-	        }
-	        return React.createElement("div", null,
-	            addButton,
-	            renderedCards);
-	    };
-	    return CardSet;
-	}(React.Component));
-	exports.CardSet = CardSet;
-	// FIXME: Had to remove type because of https://github.com/gaearon/react-dnd/issues/581
-	var DNDCardSet = react_dnd_1.DragDropContext(react_dnd_html5_backend_1.default)(CardSet);
+	var state_1 = __webpack_require__(199);
+	exports.reducer = state_1.reducer;
+	var Card_1 = __webpack_require__(200);
+	exports.Card = Card_1.DraggableCard;
+	var CardSet_1 = __webpack_require__(322);
+	exports.CardSet = CardSet_1.DNDCardSet;
 	function init(id, options) {
 	    if (options === void 0) { options = {}; }
 	    var canEdit = options['canEdit'] || true;
 	    var canDelete = options['canDelete'] || canEdit;
 	    var canOrder = options['canOrder'] || false;
-	    var summaryTextField = options['summaryTextField'];
+	    var summaryTextField = options['summaryTextField'] || 'name';
 	    var element = document.getElementById(id);
+	    if (element === null) {
+	        console.error("CondensedInlinePanel.init(): Element with id '" + id + "' does not exist.'");
+	        return;
+	    }
 	    var totalFormsField = document.getElementById(id + '-TOTAL_FORMS');
 	    var dataField = element.getElementsByClassName('condensed-inline-panel__data')[0];
 	    var sortOrderField = element.getElementsByClassName('condensed-inline-panel__sort-order')[0];
 	    var uiContainer = element.getElementsByClassName('condensed-inline-panel__ui-container')[0];
-	    var store = redux_1.createStore(reducer);
+	    var store = redux_1.createStore(state_1.reducer);
 	    var sortCompareFunc = function (a, b) {
 	        if (a.position > b.position) {
 	            return 1;
@@ -556,14 +84,17 @@ var CondensedInlinePanel =
 	    };
 	    // Rerender component when state changes
 	    store.subscribe(function () {
-	        var state = JSON.parse(store.getState());
-	        ReactDOM.render(React.createElement(DNDCardSet, { forms: state.forms, summaryTextField: summaryTextField, canEdit: canEdit, canDelete: canDelete, canOrder: canOrder, store: store, emptyForm: state.emptyForm, formTemplate: element.dataset['formTemplate'], formsetPrefix: id, sortCompareFunc: sortCompareFunc }), uiContainer);
+	        if (element === null) {
+	            return;
+	        }
+	        var state = JSON.parse(store.getState() || state_1.emptyState());
+	        ReactDOM.render(React.createElement(CardSet_1.DNDCardSet, { forms: state.forms, summaryTextField: summaryTextField, canEdit: canEdit, canDelete: canDelete, canOrder: canOrder, store: store, emptyForm: state.emptyForm, formTemplate: element.dataset['formTemplate'], formsetPrefix: id, sortCompareFunc: sortCompareFunc }), uiContainer);
 	    });
 	    // Keep sort order field up to date
 	    if (canOrder) {
 	        var sortOrderField_1 = element.getElementsByClassName('condensed-inline-panel__sort-order')[0];
 	        store.subscribe(function () {
-	            var state = JSON.parse(store.getState());
+	            var state = JSON.parse(store.getState() || state_1.emptyState());
 	            var sortOrders = [];
 	            for (var i = 0; i < state.forms.length; i++) {
 	                sortOrders.push(state.forms[i].position);
@@ -576,7 +107,7 @@ var CondensedInlinePanel =
 	    // Keep delete field up to date
 	    var deleteField = element.getElementsByClassName('condensed-inline-panel__delete')[0];
 	    store.subscribe(function () {
-	        var state = JSON.parse(store.getState());
+	        var state = JSON.parse(store.getState() || state_1.emptyState());
 	        var deletedForms = [];
 	        for (var i = 0; i < state.forms.length; i++) {
 	            if (state.forms[i].isDeleted) {
@@ -596,7 +127,7 @@ var CondensedInlinePanel =
 	    }
 	    // Update TOTAL_FORMS when the number of forms changes
 	    store.subscribe(function () {
-	        var state = JSON.parse(store.getState());
+	        var state = JSON.parse(store.getState() || state_1.emptyState());
 	        if (totalFormsField instanceof HTMLInputElement) {
 	            totalFormsField.value = state.forms.length.toString();
 	        }
@@ -23047,6 +22578,351 @@ var CondensedInlinePanel =
 
 /***/ },
 /* 199 */
+/***/ function(module, exports) {
+
+	"use strict";
+	function emptyState() {
+	    /* Returns an empty state to use as a placeholder before an actual state is loaded */
+	    var emptyState = {
+	        forms: [],
+	        emptyForm: {
+	            id: 0,
+	            isEditing: false,
+	            isNew: false,
+	            isDeleted: false,
+	            hasChanged: false,
+	            position: 1,
+	            fields: {},
+	            extra: {},
+	            errors: {},
+	        }
+	    };
+	    return JSON.stringify(emptyState);
+	}
+	exports.emptyState = emptyState;
+	function reducer(state, action) {
+	    if (state === void 0) { state = null; }
+	    if (action.type == 'SET_STATE') {
+	        return action.state;
+	    }
+	    else if (state == null) {
+	        // Ignore everything until we get an initial state
+	        return null;
+	    }
+	    var deserializedState = JSON.parse(state);
+	    if (action.type == 'SET_FORM') {
+	        deserializedState.forms[action.formId] = action.data;
+	    }
+	    if (action.type == 'ADD_FORM') {
+	        deserializedState.forms.push(action.data);
+	    }
+	    if (action.type == 'MOVE_FORM') {
+	        var movedForm = deserializedState.forms[action.formId];
+	        movedForm.hasChanged = true;
+	        var previousPosition = movedForm.position;
+	        var newPosition = action.position;
+	        if (newPosition > previousPosition)
+	            newPosition--;
+	        movedForm.position = newPosition;
+	        // Update sort orders of all other forms
+	        for (var i = 0; i < deserializedState.forms.length; i++) {
+	            if (i == action.formId)
+	                continue;
+	            var form = deserializedState.forms[i];
+	            // Forms after the previous position move up one
+	            if (form.position >= previousPosition) {
+	                form.position--;
+	            }
+	            // Forms after the new position move down one
+	            if (form.position >= newPosition) {
+	                form.position++;
+	            }
+	        }
+	    }
+	    return JSON.stringify(deserializedState);
+	}
+	exports.reducer = reducer;
+
+
+/***/ },
+/* 200 */
+/***/ function(module, exports, __webpack_require__) {
+
+	"use strict";
+	var __extends = (this && this.__extends) || function (d, b) {
+	    for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
+	    function __() { this.constructor = d; }
+	    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+	};
+	var React = __webpack_require__(23);
+	var ReactDOM = __webpack_require__(53);
+	var react_dnd_1 = __webpack_require__(201);
+	var Card = (function (_super) {
+	    __extends(Card, _super);
+	    /*
+	     * This component represents an individual object in the panel
+	     *
+	     * When not being edited, this displays a card to the user
+	     * When being edited, it expands into a form interface
+	     *
+	     * props:
+	     *  - formId: The number of the form (as assigned by Wagtail)
+	     *  - summaryText: The text to show at the top
+	     *  - canEdit: (boolean)  Set to true if this card can be edited
+	     *  - canDelete: (boolean) Set to true if this card can be deleted
+	     *  - canOrder: (boolean) Set to true if this card can be moved
+	     *  - template: A HTML template to use for the form
+	     *  - formPrefix: The prefix appeneded to the beginning of the id of each field
+	     *  - fields: Mapping of field names to their current values
+	     *  - extra: Any extra data that might be useful for rendering fields (eg, title of chosen page)
+	     *  - errors: A mapping of field names to a list of errors
+	     *  - deleted: (boolean). Set when the card has been deleted
+	     *  - isEditing: (boolean). Set when this card is being edited (displays the expanded form)
+	     *  - isNew: (boolean). Set when this card has been created in this session
+	     *  - hasChanged (boolean). Set when this card has been changed in this session
+	     *  - customiseActions. A hook to allow the action buttons to be customised.
+	     *    The props are passed through in the first argument and the list of actions
+	     *    in the second argument
+	     *  - dndKey: A key to pass to react-dnd which is different for each cardset.
+	     *    This prevents cards from being ordered across different sets.
+	     *
+	     * The following props are added by react-dnd:
+	     *  - connectDragSource: Used to hook in react-dnd
+	     *  - isDragging: (boolean) Set when this card is being dragged
+	     *
+	     * events:
+	     *  - onEditStart: Fired when the user clicks the "edit" button on the card
+	     *  - onDelete: Fired when the user clicks the "delete" button on the card
+	     *  - onEditClose: Fired when the user clicks the "close" button in the form
+	     */
+	    function Card(props) {
+	        var _this = _super.call(this, props) || this;
+	        _this.state = {
+	            showDeleteConfirm: false,
+	        };
+	        return _this;
+	    }
+	    Card.prototype.getFormHtml = function () {
+	        return {
+	            __html: this.props.template.replace(/__prefix__/g, this.props.formId.toString())
+	        };
+	    };
+	    Card.prototype.initialiseForm = function () {
+	        /* Called just after the form has been inserted into the DOM, this
+	        initialises all of the componenents in the form */
+	        // Find form element
+	        var reactElement = ReactDOM.findDOMNode(this);
+	        var formElement = reactElement.getElementsByClassName('condensed-inline-panel__form')[0];
+	        // Copy field data into the form
+	        for (var fieldName in this.props.fields) {
+	            var fieldElement = document.getElementById(this.props.formPrefix + "-" + fieldName);
+	            if (fieldElement instanceof HTMLInputElement) {
+	                fieldElement.value = this.props.fields[fieldName];
+	            }
+	        }
+	        // Add errors
+	        for (var fieldName in this.props.errors) {
+	            var fieldElement = document.getElementById(this.props.formPrefix + "-" + fieldName);
+	            if (fieldElement === null) {
+	                continue;
+	            }
+	            var fieldWrapperElement = fieldElement.closest('.field');
+	            if (fieldWrapperElement === null) {
+	                continue;
+	            }
+	            fieldWrapperElement.classList.add('error');
+	            // Append error text to field content
+	            var fieldContent = fieldWrapperElement.getElementsByClassName('field-content')[0] || fieldWrapperElement;
+	            var errors = document.createElement('p');
+	            errors.classList.add('error-message');
+	            errors.innerHTML = "<span>" + this.props.errors[fieldName].map(function (error) { return error.message; }).join(' ') + "</span>";
+	            fieldContent.appendChild(errors);
+	        }
+	        // Run any script tags embedded in the form HTML
+	        var scriptTags = formElement.getElementsByTagName('script');
+	        for (var i = 0; i < scriptTags.length; i++) {
+	            var scriptTag = scriptTags.item(i);
+	            eval(scriptTag.innerHTML);
+	        }
+	        // HACK: Make page choosers work
+	        var pageChoosers = formElement.getElementsByClassName('page-chooser');
+	        for (var i = 0; i < pageChoosers.length; i++) {
+	            var pageChooser = pageChoosers.item(i);
+	            var match = pageChooser.id.match(/id_[^-]*-\d+-([^-]*)-chooser/);
+	            if (match) {
+	                var fieldName = match[1];
+	                if (this.props.fields[fieldName]) {
+	                    // Field has a value!
+	                    // Remove blank class
+	                    pageChooser.classList.remove('blank');
+	                    // Set title
+	                    pageChooser.getElementsByClassName('title')[0].textContent = this.props.extra[fieldName]['title'];
+	                }
+	            }
+	        }
+	        // HACK: Make image choosers work
+	        var imageChoosers = formElement.getElementsByClassName('image-chooser');
+	        for (var i = 0; i < imageChoosers.length; i++) {
+	            var imageChooser = imageChoosers.item(i);
+	            var match = imageChooser.id.match(/id_[^-]*-\d+-([^-]*)-chooser/);
+	            if (match) {
+	                var fieldName = match[1];
+	                if (this.props.fields[fieldName]) {
+	                    // Field has a value!
+	                    // Remove blank class
+	                    imageChooser.classList.remove('blank');
+	                    // Preview image
+	                    var previewImage = imageChooser.querySelector('.preview-image img');
+	                    if (previewImage instanceof HTMLImageElement) {
+	                        previewImage.src = this.props.extra[fieldName]['preview_image'].src;
+	                        previewImage.alt = this.props.extra[fieldName]['preview_image'].alt;
+	                        previewImage.width = this.props.extra[fieldName]['preview_image'].width;
+	                        previewImage.height = this.props.extra[fieldName]['preview_image'].height;
+	                    }
+	                }
+	            }
+	        }
+	    };
+	    Card.prototype.shouldRenderForm = function (props) {
+	        /* Returns true if we need the form HTML to be rendered in the DOM */
+	        if (props === void 0) { props = this.props; }
+	        // Note, we still need the form HTML when the form has been edited/deleted
+	        // so the changes get submitted back to Wagtail
+	        return (props.isEditing || props.hasChanged || props.deleted) && props.canEdit;
+	    };
+	    // Actions
+	    Card.prototype.onEditStart = function (e) {
+	        return this.props.onEditStart(e);
+	    };
+	    Card.prototype.onEditClose = function (e) {
+	        var newFields = {};
+	        for (var fieldName in this.props.fields) {
+	            var fieldElement = document.getElementById(this.props.formPrefix + "-" + fieldName);
+	            if (fieldElement instanceof HTMLInputElement) {
+	                newFields[fieldName] = fieldElement.value;
+	            }
+	        }
+	        return this.props.onEditClose(e, newFields);
+	    };
+	    Card.prototype.onDelete = function (e) {
+	        this.state.showDeleteConfirm = true;
+	        this.setState(this.state);
+	        e.preventDefault();
+	        return false;
+	    };
+	    Card.prototype.onDeleteCancel = function (e) {
+	        this.state.showDeleteConfirm = false;
+	        this.setState(this.state);
+	        e.preventDefault();
+	        return false;
+	    };
+	    Card.prototype.onDeleteConfirm = function (e) {
+	        return this.props.onDelete(e);
+	    };
+	    Card.prototype.renderActions = function () {
+	        /* Renders the action buttons that appear on the right side of the header */
+	        var actions = [];
+	        // Edit/close action
+	        if (this.props.canEdit) {
+	            if (this.props.isEditing) {
+	                actions.push(React.createElement("li", { key: "edit-close", onClick: this.onEditClose.bind(this), className: "condensed-inline-panel__action condensed-inline-panel__action-close icon icon-edit" }));
+	            }
+	            else {
+	                actions.push(React.createElement("li", { key: "edit-start", onClick: this.onEditStart.bind(this), className: "condensed-inline-panel__action condensed-inline-panel__action-edit icon icon-edit" }));
+	            }
+	        }
+	        // Delete action
+	        if (this.props.canDelete) {
+	            actions.push(React.createElement("li", { key: "delete", onClick: this.onDelete.bind(this), className: "condensed-inline-panel__action condensed-inline-panel__action-delete icon icon-bin" }));
+	        }
+	        // Custom actions
+	        if (this.props.customiseActions) {
+	            this.props.customiseActions(this.props, actions);
+	        }
+	        // Delete confirm hides all other actions
+	        if (this.props.canDelete && this.state.showDeleteConfirm) {
+	            actions = [
+	                React.createElement("li", { className: "condensed-inline-panel__delete-confirm-message" }, "Are you sure that you want to delete this?"),
+	                React.createElement("li", { key: "delete", onClick: this.onDeleteConfirm.bind(this), className: "condensed-inline-panel__action condensed-inline-panel__action-delete-confirm icon icon-tick" }),
+	                React.createElement("li", { key: "cancel", onClick: this.onDeleteCancel.bind(this), className: "condensed-inline-panel__action condensed-inline-panel__action-delete-confirm-cancel icon icon-cross" }),
+	            ];
+	        }
+	        return actions;
+	    };
+	    Card.prototype.getClassNames = function () {
+	        /* Returns a list of class names to add to the card */
+	        var classes = ['condensed-inline-panel__card'];
+	        if (Object.keys(this.props.errors).length > 0) {
+	            classes.push('condensed-inline-panel__card--errors');
+	        }
+	        if (this.props.isNew) {
+	            classes.push('condensed-inline-panel__card--new');
+	        }
+	        else if (this.props.hasChanged) {
+	            classes.push('condensed-inline-panel__card--changed');
+	        }
+	        if (this.props.deleted) {
+	            classes.push('condensed-inline-panel__card--deleted');
+	        }
+	        else if (this.props.isEditing) {
+	            classes.push('condensed-inline-panel__card--editing');
+	        }
+	        if (this.props.isDragging) {
+	            classes.push('condensed-inline-panel__card--dragging');
+	        }
+	        return classes;
+	    };
+	    Card.prototype.render = function () {
+	        var form = React.createElement("div", { className: "condensed-inline-panel__form" });
+	        if (this.shouldRenderForm()) {
+	            form = React.createElement("div", { className: "condensed-inline-panel__form", dangerouslySetInnerHTML: this.getFormHtml() });
+	        }
+	        var header = React.createElement("div", { className: "condensed-inline-panel__card-header" },
+	            React.createElement("ul", { className: "condensed-inline-panel__actions" }, this.renderActions()),
+	            React.createElement("h2", null, this.props.summaryText));
+	        // Hook into react dnd
+	        header = this.props.connectDragSource(header);
+	        return React.createElement("div", { className: this.getClassNames().join(' ') },
+	            header,
+	            form);
+	    };
+	    Card.prototype.componentDidUpdate = function (prevProps, prevState) {
+	        // If the form has just been rendered, run initialiseForm
+	        if (this.shouldRenderForm() && !this.shouldRenderForm(prevProps)) {
+	            this.initialiseForm();
+	        }
+	    };
+	    Card.prototype.componentDidMount = function () {
+	        // If the form has just been rendered, run initialiseForm
+	        if (this.shouldRenderForm()) {
+	            this.initialiseForm();
+	        }
+	    };
+	    return Card;
+	}(React.Component));
+	exports.Card = Card;
+	var dragSource = {
+	    canDrag: function (props, monitor) {
+	        return props.canOrder;
+	    },
+	    beginDrag: function (props, monitor, component) {
+	        return {
+	            formId: props.formId
+	        };
+	    }
+	};
+	function dragSourceCollect(connect, monitor) {
+	    return {
+	        connectDragSource: connect.dragSource(),
+	        isDragging: monitor.isDragging(),
+	    };
+	}
+	// FIXME: Had to remove type because of https://github.com/gaearon/react-dnd/issues/581
+	exports.DraggableCard = react_dnd_1.DragSource(function (props) { return props.dndKey; }, dragSource, dragSourceCollect)(Card);
+
+
+/***/ },
+/* 201 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -23055,24 +22931,24 @@ var CondensedInlinePanel =
 	
 	function _interopRequire(obj) { return obj && obj.__esModule ? obj['default'] : obj; }
 	
-	var _DragDropContext = __webpack_require__(200);
+	var _DragDropContext = __webpack_require__(202);
 	
 	exports.DragDropContext = _interopRequire(_DragDropContext);
 	
-	var _DragLayer = __webpack_require__(297);
+	var _DragLayer = __webpack_require__(299);
 	
 	exports.DragLayer = _interopRequire(_DragLayer);
 	
-	var _DragSource = __webpack_require__(300);
+	var _DragSource = __webpack_require__(302);
 	
 	exports.DragSource = _interopRequire(_DragSource);
 	
-	var _DropTarget = __webpack_require__(315);
+	var _DropTarget = __webpack_require__(317);
 	
 	exports.DropTarget = _interopRequire(_DropTarget);
 
 /***/ },
-/* 200 */
+/* 202 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -23097,13 +22973,13 @@ var CondensedInlinePanel =
 	
 	var _react2 = _interopRequireDefault(_react);
 	
-	var _dndCore = __webpack_require__(201);
+	var _dndCore = __webpack_require__(203);
 	
-	var _invariant = __webpack_require__(208);
+	var _invariant = __webpack_require__(210);
 	
 	var _invariant2 = _interopRequireDefault(_invariant);
 	
-	var _utilsCheckDecoratorArguments = __webpack_require__(296);
+	var _utilsCheckDecoratorArguments = __webpack_require__(298);
 	
 	var _utilsCheckDecoratorArguments2 = _interopRequireDefault(_utilsCheckDecoratorArguments);
 	
@@ -23177,7 +23053,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 201 */
+/* 203 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -23186,24 +23062,24 @@ var CondensedInlinePanel =
 	
 	function _interopRequire(obj) { return obj && obj.__esModule ? obj['default'] : obj; }
 	
-	var _DragDropManager = __webpack_require__(202);
+	var _DragDropManager = __webpack_require__(204);
 	
 	exports.DragDropManager = _interopRequire(_DragDropManager);
 	
-	var _DragSource = __webpack_require__(293);
+	var _DragSource = __webpack_require__(295);
 	
 	exports.DragSource = _interopRequire(_DragSource);
 	
-	var _DropTarget = __webpack_require__(294);
+	var _DropTarget = __webpack_require__(296);
 	
 	exports.DropTarget = _interopRequire(_DropTarget);
 	
-	var _backendsCreateTestBackend = __webpack_require__(295);
+	var _backendsCreateTestBackend = __webpack_require__(297);
 	
 	exports.createTestBackend = _interopRequire(_backendsCreateTestBackend);
 
 /***/ },
-/* 202 */
+/* 204 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -23220,19 +23096,19 @@ var CondensedInlinePanel =
 	
 	var _reduxLibCreateStore2 = _interopRequireDefault(_reduxLibCreateStore);
 	
-	var _reducers = __webpack_require__(203);
+	var _reducers = __webpack_require__(205);
 	
 	var _reducers2 = _interopRequireDefault(_reducers);
 	
-	var _actionsDragDrop = __webpack_require__(205);
+	var _actionsDragDrop = __webpack_require__(207);
 	
 	var dragDropActions = _interopRequireWildcard(_actionsDragDrop);
 	
-	var _DragDropMonitor = __webpack_require__(288);
+	var _DragDropMonitor = __webpack_require__(290);
 	
 	var _DragDropMonitor2 = _interopRequireDefault(_DragDropMonitor);
 	
-	var _HandlerRegistry = __webpack_require__(289);
+	var _HandlerRegistry = __webpack_require__(291);
 	
 	var _HandlerRegistry2 = _interopRequireDefault(_HandlerRegistry);
 	
@@ -23301,7 +23177,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 203 */
+/* 205 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -23310,23 +23186,23 @@ var CondensedInlinePanel =
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 	
-	var _dragOffset = __webpack_require__(204);
+	var _dragOffset = __webpack_require__(206);
 	
 	var _dragOffset2 = _interopRequireDefault(_dragOffset);
 	
-	var _dragOperation = __webpack_require__(210);
+	var _dragOperation = __webpack_require__(212);
 	
 	var _dragOperation2 = _interopRequireDefault(_dragOperation);
 	
-	var _refCount = __webpack_require__(269);
+	var _refCount = __webpack_require__(271);
 	
 	var _refCount2 = _interopRequireDefault(_refCount);
 	
-	var _dirtyHandlerIds = __webpack_require__(270);
+	var _dirtyHandlerIds = __webpack_require__(272);
 	
 	var _dirtyHandlerIds2 = _interopRequireDefault(_dirtyHandlerIds);
 	
-	var _stateId = __webpack_require__(287);
+	var _stateId = __webpack_require__(289);
 	
 	var _stateId2 = _interopRequireDefault(_stateId);
 	
@@ -23345,7 +23221,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 204 */
+/* 206 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -23358,7 +23234,7 @@ var CondensedInlinePanel =
 	exports.getSourceClientOffset = getSourceClientOffset;
 	exports.getDifferenceFromInitialOffset = getDifferenceFromInitialOffset;
 	
-	var _actionsDragDrop = __webpack_require__(205);
+	var _actionsDragDrop = __webpack_require__(207);
 	
 	var initialState = {
 	  initialSourceClientOffset: null,
@@ -23426,7 +23302,7 @@ var CondensedInlinePanel =
 	}
 
 /***/ },
-/* 205 */
+/* 207 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -23440,19 +23316,19 @@ var CondensedInlinePanel =
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 	
-	var _utilsMatchesType = __webpack_require__(206);
+	var _utilsMatchesType = __webpack_require__(208);
 	
 	var _utilsMatchesType2 = _interopRequireDefault(_utilsMatchesType);
 	
-	var _invariant = __webpack_require__(208);
+	var _invariant = __webpack_require__(210);
 	
 	var _invariant2 = _interopRequireDefault(_invariant);
 	
-	var _lodashIsArray = __webpack_require__(207);
+	var _lodashIsArray = __webpack_require__(209);
 	
 	var _lodashIsArray2 = _interopRequireDefault(_lodashIsArray);
 	
-	var _lodashIsObject = __webpack_require__(209);
+	var _lodashIsObject = __webpack_require__(211);
 	
 	var _lodashIsObject2 = _interopRequireDefault(_lodashIsObject);
 	
@@ -23627,7 +23503,7 @@ var CondensedInlinePanel =
 	}
 
 /***/ },
-/* 206 */
+/* 208 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -23637,7 +23513,7 @@ var CondensedInlinePanel =
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 	
-	var _lodashIsArray = __webpack_require__(207);
+	var _lodashIsArray = __webpack_require__(209);
 	
 	var _lodashIsArray2 = _interopRequireDefault(_lodashIsArray);
 	
@@ -23654,7 +23530,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 207 */
+/* 209 */
 /***/ function(module, exports) {
 
 	/**
@@ -23686,7 +23562,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 208 */
+/* 210 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* WEBPACK VAR INJECTION */(function(process) {/**
@@ -23744,7 +23620,7 @@ var CondensedInlinePanel =
 	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(2)))
 
 /***/ },
-/* 209 */
+/* 211 */
 /***/ function(module, exports) {
 
 	/**
@@ -23781,7 +23657,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 210 */
+/* 212 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -23794,11 +23670,11 @@ var CondensedInlinePanel =
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 	
-	var _actionsDragDrop = __webpack_require__(205);
+	var _actionsDragDrop = __webpack_require__(207);
 	
-	var _actionsRegistry = __webpack_require__(211);
+	var _actionsRegistry = __webpack_require__(213);
 	
-	var _lodashWithout = __webpack_require__(212);
+	var _lodashWithout = __webpack_require__(214);
 	
 	var _lodashWithout2 = _interopRequireDefault(_lodashWithout);
 	
@@ -23864,7 +23740,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 211 */
+/* 213 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -23913,12 +23789,12 @@ var CondensedInlinePanel =
 	}
 
 /***/ },
-/* 212 */
+/* 214 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var baseDifference = __webpack_require__(213),
-	    baseRest = __webpack_require__(257),
-	    isArrayLikeObject = __webpack_require__(266);
+	var baseDifference = __webpack_require__(215),
+	    baseRest = __webpack_require__(259),
+	    isArrayLikeObject = __webpack_require__(268);
 	
 	/**
 	 * Creates an array excluding all given values using
@@ -23950,15 +23826,15 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 213 */
+/* 215 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var SetCache = __webpack_require__(214),
-	    arrayIncludes = __webpack_require__(248),
-	    arrayIncludesWith = __webpack_require__(253),
-	    arrayMap = __webpack_require__(254),
-	    baseUnary = __webpack_require__(255),
-	    cacheHas = __webpack_require__(256);
+	var SetCache = __webpack_require__(216),
+	    arrayIncludes = __webpack_require__(250),
+	    arrayIncludesWith = __webpack_require__(255),
+	    arrayMap = __webpack_require__(256),
+	    baseUnary = __webpack_require__(257),
+	    cacheHas = __webpack_require__(258);
 	
 	/** Used as the size to enable large array optimizations. */
 	var LARGE_ARRAY_SIZE = 200;
@@ -24023,12 +23899,12 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 214 */
+/* 216 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var MapCache = __webpack_require__(215),
-	    setCacheAdd = __webpack_require__(246),
-	    setCacheHas = __webpack_require__(247);
+	var MapCache = __webpack_require__(217),
+	    setCacheAdd = __webpack_require__(248),
+	    setCacheHas = __webpack_require__(249);
 	
 	/**
 	 *
@@ -24056,14 +23932,14 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 215 */
+/* 217 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var mapCacheClear = __webpack_require__(216),
-	    mapCacheDelete = __webpack_require__(240),
-	    mapCacheGet = __webpack_require__(243),
-	    mapCacheHas = __webpack_require__(244),
-	    mapCacheSet = __webpack_require__(245);
+	var mapCacheClear = __webpack_require__(218),
+	    mapCacheDelete = __webpack_require__(242),
+	    mapCacheGet = __webpack_require__(245),
+	    mapCacheHas = __webpack_require__(246),
+	    mapCacheSet = __webpack_require__(247);
 	
 	/**
 	 * Creates a map cache object to store key-value pairs.
@@ -24094,12 +23970,12 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 216 */
+/* 218 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var Hash = __webpack_require__(217),
-	    ListCache = __webpack_require__(231),
-	    Map = __webpack_require__(239);
+	var Hash = __webpack_require__(219),
+	    ListCache = __webpack_require__(233),
+	    Map = __webpack_require__(241);
 	
 	/**
 	 * Removes all key-value entries from the map.
@@ -24121,14 +23997,14 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 217 */
+/* 219 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var hashClear = __webpack_require__(218),
-	    hashDelete = __webpack_require__(227),
-	    hashGet = __webpack_require__(228),
-	    hashHas = __webpack_require__(229),
-	    hashSet = __webpack_require__(230);
+	var hashClear = __webpack_require__(220),
+	    hashDelete = __webpack_require__(229),
+	    hashGet = __webpack_require__(230),
+	    hashHas = __webpack_require__(231),
+	    hashSet = __webpack_require__(232);
 	
 	/**
 	 * Creates a hash object.
@@ -24159,10 +24035,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 218 */
+/* 220 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var nativeCreate = __webpack_require__(219);
+	var nativeCreate = __webpack_require__(221);
 	
 	/**
 	 * Removes all key-value entries from the hash.
@@ -24180,10 +24056,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 219 */
+/* 221 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var getNative = __webpack_require__(220);
+	var getNative = __webpack_require__(222);
 	
 	/* Built-in method references that are verified to be native. */
 	var nativeCreate = getNative(Object, 'create');
@@ -24192,11 +24068,11 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 220 */
+/* 222 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var baseIsNative = __webpack_require__(221),
-	    getValue = __webpack_require__(226);
+	var baseIsNative = __webpack_require__(223),
+	    getValue = __webpack_require__(228);
 	
 	/**
 	 * Gets the native function at `key` of `object`.
@@ -24215,13 +24091,13 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 221 */
+/* 223 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var isFunction = __webpack_require__(222),
-	    isMasked = __webpack_require__(223),
-	    isObject = __webpack_require__(209),
-	    toSource = __webpack_require__(225);
+	var isFunction = __webpack_require__(224),
+	    isMasked = __webpack_require__(225),
+	    isObject = __webpack_require__(211),
+	    toSource = __webpack_require__(227);
 	
 	/**
 	 * Used to match `RegExp`
@@ -24268,11 +24144,11 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 222 */
+/* 224 */
 /***/ function(module, exports, __webpack_require__) {
 
 	var baseGetTag = __webpack_require__(5),
-	    isObject = __webpack_require__(209);
+	    isObject = __webpack_require__(211);
 	
 	/** `Object#toString` result references. */
 	var asyncTag = '[object AsyncFunction]',
@@ -24311,10 +24187,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 223 */
+/* 225 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var coreJsData = __webpack_require__(224);
+	var coreJsData = __webpack_require__(226);
 	
 	/** Used to detect methods masquerading as native. */
 	var maskSrcKey = (function() {
@@ -24337,7 +24213,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 224 */
+/* 226 */
 /***/ function(module, exports, __webpack_require__) {
 
 	var root = __webpack_require__(7);
@@ -24349,7 +24225,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 225 */
+/* 227 */
 /***/ function(module, exports) {
 
 	/** Used for built-in method references. */
@@ -24381,7 +24257,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 226 */
+/* 228 */
 /***/ function(module, exports) {
 
 	/**
@@ -24400,7 +24276,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 227 */
+/* 229 */
 /***/ function(module, exports) {
 
 	/**
@@ -24423,10 +24299,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 228 */
+/* 230 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var nativeCreate = __webpack_require__(219);
+	var nativeCreate = __webpack_require__(221);
 	
 	/** Used to stand-in for `undefined` hash values. */
 	var HASH_UNDEFINED = '__lodash_hash_undefined__';
@@ -24459,10 +24335,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 229 */
+/* 231 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var nativeCreate = __webpack_require__(219);
+	var nativeCreate = __webpack_require__(221);
 	
 	/** Used for built-in method references. */
 	var objectProto = Object.prototype;
@@ -24488,10 +24364,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 230 */
+/* 232 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var nativeCreate = __webpack_require__(219);
+	var nativeCreate = __webpack_require__(221);
 	
 	/** Used to stand-in for `undefined` hash values. */
 	var HASH_UNDEFINED = '__lodash_hash_undefined__';
@@ -24517,14 +24393,14 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 231 */
+/* 233 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var listCacheClear = __webpack_require__(232),
-	    listCacheDelete = __webpack_require__(233),
-	    listCacheGet = __webpack_require__(236),
-	    listCacheHas = __webpack_require__(237),
-	    listCacheSet = __webpack_require__(238);
+	var listCacheClear = __webpack_require__(234),
+	    listCacheDelete = __webpack_require__(235),
+	    listCacheGet = __webpack_require__(238),
+	    listCacheHas = __webpack_require__(239),
+	    listCacheSet = __webpack_require__(240);
 	
 	/**
 	 * Creates an list cache object.
@@ -24555,7 +24431,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 232 */
+/* 234 */
 /***/ function(module, exports) {
 
 	/**
@@ -24574,10 +24450,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 233 */
+/* 235 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var assocIndexOf = __webpack_require__(234);
+	var assocIndexOf = __webpack_require__(236);
 	
 	/** Used for built-in method references. */
 	var arrayProto = Array.prototype;
@@ -24615,10 +24491,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 234 */
+/* 236 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var eq = __webpack_require__(235);
+	var eq = __webpack_require__(237);
 	
 	/**
 	 * Gets the index at which the `key` is found in `array` of key-value pairs.
@@ -24642,7 +24518,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 235 */
+/* 237 */
 /***/ function(module, exports) {
 
 	/**
@@ -24685,10 +24561,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 236 */
+/* 238 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var assocIndexOf = __webpack_require__(234);
+	var assocIndexOf = __webpack_require__(236);
 	
 	/**
 	 * Gets the list cache value for `key`.
@@ -24710,10 +24586,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 237 */
+/* 239 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var assocIndexOf = __webpack_require__(234);
+	var assocIndexOf = __webpack_require__(236);
 	
 	/**
 	 * Checks if a list cache value for `key` exists.
@@ -24732,10 +24608,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 238 */
+/* 240 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var assocIndexOf = __webpack_require__(234);
+	var assocIndexOf = __webpack_require__(236);
 	
 	/**
 	 * Sets the list cache `key` to `value`.
@@ -24764,10 +24640,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 239 */
+/* 241 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var getNative = __webpack_require__(220),
+	var getNative = __webpack_require__(222),
 	    root = __webpack_require__(7);
 	
 	/* Built-in method references that are verified to be native. */
@@ -24777,10 +24653,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 240 */
+/* 242 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var getMapData = __webpack_require__(241);
+	var getMapData = __webpack_require__(243);
 	
 	/**
 	 * Removes `key` and its value from the map.
@@ -24801,10 +24677,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 241 */
+/* 243 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var isKeyable = __webpack_require__(242);
+	var isKeyable = __webpack_require__(244);
 	
 	/**
 	 * Gets the data for `map`.
@@ -24825,7 +24701,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 242 */
+/* 244 */
 /***/ function(module, exports) {
 
 	/**
@@ -24846,10 +24722,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 243 */
+/* 245 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var getMapData = __webpack_require__(241);
+	var getMapData = __webpack_require__(243);
 	
 	/**
 	 * Gets the map value for `key`.
@@ -24868,10 +24744,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 244 */
+/* 246 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var getMapData = __webpack_require__(241);
+	var getMapData = __webpack_require__(243);
 	
 	/**
 	 * Checks if a map value for `key` exists.
@@ -24890,10 +24766,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 245 */
+/* 247 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var getMapData = __webpack_require__(241);
+	var getMapData = __webpack_require__(243);
 	
 	/**
 	 * Sets the map `key` to `value`.
@@ -24918,7 +24794,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 246 */
+/* 248 */
 /***/ function(module, exports) {
 
 	/** Used to stand-in for `undefined` hash values. */
@@ -24943,7 +24819,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 247 */
+/* 249 */
 /***/ function(module, exports) {
 
 	/**
@@ -24963,10 +24839,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 248 */
+/* 250 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var baseIndexOf = __webpack_require__(249);
+	var baseIndexOf = __webpack_require__(251);
 	
 	/**
 	 * A specialized version of `_.includes` for arrays without support for
@@ -24986,12 +24862,12 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 249 */
+/* 251 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var baseFindIndex = __webpack_require__(250),
-	    baseIsNaN = __webpack_require__(251),
-	    strictIndexOf = __webpack_require__(252);
+	var baseFindIndex = __webpack_require__(252),
+	    baseIsNaN = __webpack_require__(253),
+	    strictIndexOf = __webpack_require__(254);
 	
 	/**
 	 * The base implementation of `_.indexOf` without `fromIndex` bounds checks.
@@ -25012,7 +24888,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 250 */
+/* 252 */
 /***/ function(module, exports) {
 
 	/**
@@ -25042,7 +24918,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 251 */
+/* 253 */
 /***/ function(module, exports) {
 
 	/**
@@ -25060,7 +24936,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 252 */
+/* 254 */
 /***/ function(module, exports) {
 
 	/**
@@ -25089,7 +24965,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 253 */
+/* 255 */
 /***/ function(module, exports) {
 
 	/**
@@ -25117,7 +24993,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 254 */
+/* 256 */
 /***/ function(module, exports) {
 
 	/**
@@ -25144,7 +25020,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 255 */
+/* 257 */
 /***/ function(module, exports) {
 
 	/**
@@ -25164,7 +25040,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 256 */
+/* 258 */
 /***/ function(module, exports) {
 
 	/**
@@ -25183,12 +25059,12 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 257 */
+/* 259 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var identity = __webpack_require__(258),
-	    overRest = __webpack_require__(259),
-	    setToString = __webpack_require__(261);
+	var identity = __webpack_require__(260),
+	    overRest = __webpack_require__(261),
+	    setToString = __webpack_require__(263);
 	
 	/**
 	 * The base implementation of `_.rest` which doesn't validate or coerce arguments.
@@ -25206,7 +25082,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 258 */
+/* 260 */
 /***/ function(module, exports) {
 
 	/**
@@ -25233,10 +25109,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 259 */
+/* 261 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var apply = __webpack_require__(260);
+	var apply = __webpack_require__(262);
 	
 	/* Built-in method references for those with the same name as other `lodash` methods. */
 	var nativeMax = Math.max;
@@ -25275,7 +25151,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 260 */
+/* 262 */
 /***/ function(module, exports) {
 
 	/**
@@ -25302,11 +25178,11 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 261 */
+/* 263 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var baseSetToString = __webpack_require__(262),
-	    shortOut = __webpack_require__(265);
+	var baseSetToString = __webpack_require__(264),
+	    shortOut = __webpack_require__(267);
 	
 	/**
 	 * Sets the `toString` method of `func` to return `string`.
@@ -25322,12 +25198,12 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 262 */
+/* 264 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var constant = __webpack_require__(263),
-	    defineProperty = __webpack_require__(264),
-	    identity = __webpack_require__(258);
+	var constant = __webpack_require__(265),
+	    defineProperty = __webpack_require__(266),
+	    identity = __webpack_require__(260);
 	
 	/**
 	 * The base implementation of `setToString` without support for hot loop shorting.
@@ -25350,7 +25226,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 263 */
+/* 265 */
 /***/ function(module, exports) {
 
 	/**
@@ -25382,10 +25258,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 264 */
+/* 266 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var getNative = __webpack_require__(220);
+	var getNative = __webpack_require__(222);
 	
 	var defineProperty = (function() {
 	  try {
@@ -25399,7 +25275,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 265 */
+/* 267 */
 /***/ function(module, exports) {
 
 	/** Used to detect hot functions by number of calls within a span of milliseconds. */
@@ -25442,10 +25318,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 266 */
+/* 268 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var isArrayLike = __webpack_require__(267),
+	var isArrayLike = __webpack_require__(269),
 	    isObjectLike = __webpack_require__(13);
 	
 	/**
@@ -25481,11 +25357,11 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 267 */
+/* 269 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var isFunction = __webpack_require__(222),
-	    isLength = __webpack_require__(268);
+	var isFunction = __webpack_require__(224),
+	    isLength = __webpack_require__(270);
 	
 	/**
 	 * Checks if `value` is array-like. A value is considered array-like if it's
@@ -25520,7 +25396,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 268 */
+/* 270 */
 /***/ function(module, exports) {
 
 	/** Used as references for various `Number` constants. */
@@ -25561,7 +25437,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 269 */
+/* 271 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -25569,7 +25445,7 @@ var CondensedInlinePanel =
 	exports.__esModule = true;
 	exports['default'] = refCount;
 	
-	var _actionsRegistry = __webpack_require__(211);
+	var _actionsRegistry = __webpack_require__(213);
 	
 	function refCount(state, action) {
 	  if (state === undefined) state = 0;
@@ -25589,7 +25465,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 270 */
+/* 272 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -25600,17 +25476,17 @@ var CondensedInlinePanel =
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 	
-	var _lodashXor = __webpack_require__(271);
+	var _lodashXor = __webpack_require__(273);
 	
 	var _lodashXor2 = _interopRequireDefault(_lodashXor);
 	
-	var _lodashIntersection = __webpack_require__(284);
+	var _lodashIntersection = __webpack_require__(286);
 	
 	var _lodashIntersection2 = _interopRequireDefault(_lodashIntersection);
 	
-	var _actionsDragDrop = __webpack_require__(205);
+	var _actionsDragDrop = __webpack_require__(207);
 	
-	var _actionsRegistry = __webpack_require__(211);
+	var _actionsRegistry = __webpack_require__(213);
 	
 	var NONE = [];
 	var ALL = [];
@@ -25683,13 +25559,13 @@ var CondensedInlinePanel =
 	}
 
 /***/ },
-/* 271 */
+/* 273 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var arrayFilter = __webpack_require__(272),
-	    baseRest = __webpack_require__(257),
-	    baseXor = __webpack_require__(273),
-	    isArrayLikeObject = __webpack_require__(266);
+	var arrayFilter = __webpack_require__(274),
+	    baseRest = __webpack_require__(259),
+	    baseXor = __webpack_require__(275),
+	    isArrayLikeObject = __webpack_require__(268);
 	
 	/**
 	 * Creates an array of unique values that is the
@@ -25717,7 +25593,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 272 */
+/* 274 */
 /***/ function(module, exports) {
 
 	/**
@@ -25748,12 +25624,12 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 273 */
+/* 275 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var baseDifference = __webpack_require__(213),
-	    baseFlatten = __webpack_require__(274),
-	    baseUniq = __webpack_require__(279);
+	var baseDifference = __webpack_require__(215),
+	    baseFlatten = __webpack_require__(276),
+	    baseUniq = __webpack_require__(281);
 	
 	/**
 	 * The base implementation of methods like `_.xor`, without support for
@@ -25790,11 +25666,11 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 274 */
+/* 276 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var arrayPush = __webpack_require__(275),
-	    isFlattenable = __webpack_require__(276);
+	var arrayPush = __webpack_require__(277),
+	    isFlattenable = __webpack_require__(278);
 	
 	/**
 	 * The base implementation of `_.flatten` with support for restricting flattening.
@@ -25834,7 +25710,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 275 */
+/* 277 */
 /***/ function(module, exports) {
 
 	/**
@@ -25860,12 +25736,12 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 276 */
+/* 278 */
 /***/ function(module, exports, __webpack_require__) {
 
 	var Symbol = __webpack_require__(6),
-	    isArguments = __webpack_require__(277),
-	    isArray = __webpack_require__(207);
+	    isArguments = __webpack_require__(279),
+	    isArray = __webpack_require__(209);
 	
 	/** Built-in value references. */
 	var spreadableSymbol = Symbol ? Symbol.isConcatSpreadable : undefined;
@@ -25886,10 +25762,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 277 */
+/* 279 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var baseIsArguments = __webpack_require__(278),
+	var baseIsArguments = __webpack_require__(280),
 	    isObjectLike = __webpack_require__(13);
 	
 	/** Used for built-in method references. */
@@ -25928,7 +25804,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 278 */
+/* 280 */
 /***/ function(module, exports, __webpack_require__) {
 
 	var baseGetTag = __webpack_require__(5),
@@ -25952,15 +25828,15 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 279 */
+/* 281 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var SetCache = __webpack_require__(214),
-	    arrayIncludes = __webpack_require__(248),
-	    arrayIncludesWith = __webpack_require__(253),
-	    cacheHas = __webpack_require__(256),
-	    createSet = __webpack_require__(280),
-	    setToArray = __webpack_require__(283);
+	var SetCache = __webpack_require__(216),
+	    arrayIncludes = __webpack_require__(250),
+	    arrayIncludesWith = __webpack_require__(255),
+	    cacheHas = __webpack_require__(258),
+	    createSet = __webpack_require__(282),
+	    setToArray = __webpack_require__(285);
 	
 	/** Used as the size to enable large array optimizations. */
 	var LARGE_ARRAY_SIZE = 200;
@@ -26030,12 +25906,12 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 280 */
+/* 282 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var Set = __webpack_require__(281),
-	    noop = __webpack_require__(282),
-	    setToArray = __webpack_require__(283);
+	var Set = __webpack_require__(283),
+	    noop = __webpack_require__(284),
+	    setToArray = __webpack_require__(285);
 	
 	/** Used as references for various `Number` constants. */
 	var INFINITY = 1 / 0;
@@ -26055,10 +25931,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 281 */
+/* 283 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var getNative = __webpack_require__(220),
+	var getNative = __webpack_require__(222),
 	    root = __webpack_require__(7);
 	
 	/* Built-in method references that are verified to be native. */
@@ -26068,7 +25944,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 282 */
+/* 284 */
 /***/ function(module, exports) {
 
 	/**
@@ -26091,7 +25967,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 283 */
+/* 285 */
 /***/ function(module, exports) {
 
 	/**
@@ -26115,13 +25991,13 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 284 */
+/* 286 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var arrayMap = __webpack_require__(254),
-	    baseIntersection = __webpack_require__(285),
-	    baseRest = __webpack_require__(257),
-	    castArrayLikeObject = __webpack_require__(286);
+	var arrayMap = __webpack_require__(256),
+	    baseIntersection = __webpack_require__(287),
+	    baseRest = __webpack_require__(259),
+	    castArrayLikeObject = __webpack_require__(288);
 	
 	/**
 	 * Creates an array of unique values that are included in all given arrays
@@ -26151,15 +26027,15 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 285 */
+/* 287 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var SetCache = __webpack_require__(214),
-	    arrayIncludes = __webpack_require__(248),
-	    arrayIncludesWith = __webpack_require__(253),
-	    arrayMap = __webpack_require__(254),
-	    baseUnary = __webpack_require__(255),
-	    cacheHas = __webpack_require__(256);
+	var SetCache = __webpack_require__(216),
+	    arrayIncludes = __webpack_require__(250),
+	    arrayIncludesWith = __webpack_require__(255),
+	    arrayMap = __webpack_require__(256),
+	    baseUnary = __webpack_require__(257),
+	    cacheHas = __webpack_require__(258);
 	
 	/* Built-in method references for those with the same name as other `lodash` methods. */
 	var nativeMin = Math.min;
@@ -26231,10 +26107,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 286 */
+/* 288 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var isArrayLikeObject = __webpack_require__(266);
+	var isArrayLikeObject = __webpack_require__(268);
 	
 	/**
 	 * Casts `value` to an empty array if it's not an array like object.
@@ -26251,7 +26127,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 287 */
+/* 289 */
 /***/ function(module, exports) {
 
 	"use strict";
@@ -26268,7 +26144,7 @@ var CondensedInlinePanel =
 	module.exports = exports["default"];
 
 /***/ },
-/* 288 */
+/* 290 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -26279,25 +26155,25 @@ var CondensedInlinePanel =
 	
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError('Cannot call a class as a function'); } }
 	
-	var _invariant = __webpack_require__(208);
+	var _invariant = __webpack_require__(210);
 	
 	var _invariant2 = _interopRequireDefault(_invariant);
 	
-	var _utilsMatchesType = __webpack_require__(206);
+	var _utilsMatchesType = __webpack_require__(208);
 	
 	var _utilsMatchesType2 = _interopRequireDefault(_utilsMatchesType);
 	
-	var _lodashIsArray = __webpack_require__(207);
+	var _lodashIsArray = __webpack_require__(209);
 	
 	var _lodashIsArray2 = _interopRequireDefault(_lodashIsArray);
 	
-	var _HandlerRegistry = __webpack_require__(289);
+	var _HandlerRegistry = __webpack_require__(291);
 	
 	var _HandlerRegistry2 = _interopRequireDefault(_HandlerRegistry);
 	
-	var _reducersDragOffset = __webpack_require__(204);
+	var _reducersDragOffset = __webpack_require__(206);
 	
-	var _reducersDirtyHandlerIds = __webpack_require__(270);
+	var _reducersDirtyHandlerIds = __webpack_require__(272);
 	
 	var DragDropMonitor = (function () {
 	  function DragDropMonitor(store) {
@@ -26483,7 +26359,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 289 */
+/* 291 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -26496,21 +26372,21 @@ var CondensedInlinePanel =
 	
 	function _typeof(obj) { return obj && obj.constructor === Symbol ? 'symbol' : typeof obj; }
 	
-	var _invariant = __webpack_require__(208);
+	var _invariant = __webpack_require__(210);
 	
 	var _invariant2 = _interopRequireDefault(_invariant);
 	
-	var _lodashIsArray = __webpack_require__(207);
+	var _lodashIsArray = __webpack_require__(209);
 	
 	var _lodashIsArray2 = _interopRequireDefault(_lodashIsArray);
 	
-	var _utilsGetNextUniqueId = __webpack_require__(290);
+	var _utilsGetNextUniqueId = __webpack_require__(292);
 	
 	var _utilsGetNextUniqueId2 = _interopRequireDefault(_utilsGetNextUniqueId);
 	
-	var _actionsRegistry = __webpack_require__(211);
+	var _actionsRegistry = __webpack_require__(213);
 	
-	var _asap = __webpack_require__(291);
+	var _asap = __webpack_require__(293);
 	
 	var _asap2 = _interopRequireDefault(_asap);
 	
@@ -26692,7 +26568,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 290 */
+/* 292 */
 /***/ function(module, exports) {
 
 	"use strict";
@@ -26708,13 +26584,13 @@ var CondensedInlinePanel =
 	module.exports = exports["default"];
 
 /***/ },
-/* 291 */
+/* 293 */
 /***/ function(module, exports, __webpack_require__) {
 
 	"use strict";
 	
 	// rawAsap provides everything we need except exception management.
-	var rawAsap = __webpack_require__(292);
+	var rawAsap = __webpack_require__(294);
 	// RawTasks are recycled to reduce GC churn.
 	var freeTasks = [];
 	// We queue errors to ensure they are thrown in right order (FIFO).
@@ -26780,7 +26656,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 292 */
+/* 294 */
 /***/ function(module, exports) {
 
 	/* WEBPACK VAR INJECTION */(function(global) {"use strict";
@@ -27010,7 +26886,7 @@ var CondensedInlinePanel =
 	/* WEBPACK VAR INJECTION */}.call(exports, (function() { return this; }())))
 
 /***/ },
-/* 293 */
+/* 295 */
 /***/ function(module, exports) {
 
 	"use strict";
@@ -27041,7 +26917,7 @@ var CondensedInlinePanel =
 	module.exports = exports["default"];
 
 /***/ },
-/* 294 */
+/* 296 */
 /***/ function(module, exports) {
 
 	"use strict";
@@ -27070,7 +26946,7 @@ var CondensedInlinePanel =
 	module.exports = exports["default"];
 
 /***/ },
-/* 295 */
+/* 297 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -27082,7 +26958,7 @@ var CondensedInlinePanel =
 	
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError('Cannot call a class as a function'); } }
 	
-	var _lodashNoop = __webpack_require__(282);
+	var _lodashNoop = __webpack_require__(284);
 	
 	var _lodashNoop2 = _interopRequireDefault(_lodashNoop);
 	
@@ -27143,7 +27019,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 296 */
+/* 298 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* WEBPACK VAR INJECTION */(function(process) {'use strict';
@@ -27172,7 +27048,7 @@ var CondensedInlinePanel =
 	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(2)))
 
 /***/ },
-/* 297 */
+/* 299 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -27197,11 +27073,11 @@ var CondensedInlinePanel =
 	
 	var _react2 = _interopRequireDefault(_react);
 	
-	var _utilsShallowEqual = __webpack_require__(298);
+	var _utilsShallowEqual = __webpack_require__(300);
 	
 	var _utilsShallowEqual2 = _interopRequireDefault(_utilsShallowEqual);
 	
-	var _utilsShallowEqualScalar = __webpack_require__(299);
+	var _utilsShallowEqualScalar = __webpack_require__(301);
 	
 	var _utilsShallowEqualScalar2 = _interopRequireDefault(_utilsShallowEqualScalar);
 	
@@ -27209,11 +27085,11 @@ var CondensedInlinePanel =
 	
 	var _lodashIsPlainObject2 = _interopRequireDefault(_lodashIsPlainObject);
 	
-	var _invariant = __webpack_require__(208);
+	var _invariant = __webpack_require__(210);
 	
 	var _invariant2 = _interopRequireDefault(_invariant);
 	
-	var _utilsCheckDecoratorArguments = __webpack_require__(296);
+	var _utilsCheckDecoratorArguments = __webpack_require__(298);
 	
 	var _utilsCheckDecoratorArguments2 = _interopRequireDefault(_utilsCheckDecoratorArguments);
 	
@@ -27315,7 +27191,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 298 */
+/* 300 */
 /***/ function(module, exports) {
 
 	"use strict";
@@ -27356,7 +27232,7 @@ var CondensedInlinePanel =
 	module.exports = exports["default"];
 
 /***/ },
-/* 299 */
+/* 301 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -27401,7 +27277,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 300 */
+/* 302 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -27412,7 +27288,7 @@ var CondensedInlinePanel =
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 	
-	var _invariant = __webpack_require__(208);
+	var _invariant = __webpack_require__(210);
 	
 	var _invariant2 = _interopRequireDefault(_invariant);
 	
@@ -27420,31 +27296,31 @@ var CondensedInlinePanel =
 	
 	var _lodashIsPlainObject2 = _interopRequireDefault(_lodashIsPlainObject);
 	
-	var _utilsCheckDecoratorArguments = __webpack_require__(296);
+	var _utilsCheckDecoratorArguments = __webpack_require__(298);
 	
 	var _utilsCheckDecoratorArguments2 = _interopRequireDefault(_utilsCheckDecoratorArguments);
 	
-	var _decorateHandler = __webpack_require__(301);
+	var _decorateHandler = __webpack_require__(303);
 	
 	var _decorateHandler2 = _interopRequireDefault(_decorateHandler);
 	
-	var _registerSource = __webpack_require__(307);
+	var _registerSource = __webpack_require__(309);
 	
 	var _registerSource2 = _interopRequireDefault(_registerSource);
 	
-	var _createSourceFactory = __webpack_require__(308);
+	var _createSourceFactory = __webpack_require__(310);
 	
 	var _createSourceFactory2 = _interopRequireDefault(_createSourceFactory);
 	
-	var _createSourceMonitor = __webpack_require__(309);
+	var _createSourceMonitor = __webpack_require__(311);
 	
 	var _createSourceMonitor2 = _interopRequireDefault(_createSourceMonitor);
 	
-	var _createSourceConnector = __webpack_require__(310);
+	var _createSourceConnector = __webpack_require__(312);
 	
 	var _createSourceConnector2 = _interopRequireDefault(_createSourceConnector);
 	
-	var _utilsIsValidType = __webpack_require__(314);
+	var _utilsIsValidType = __webpack_require__(316);
 	
 	var _utilsIsValidType2 = _interopRequireDefault(_utilsIsValidType);
 	
@@ -27485,7 +27361,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 301 */
+/* 303 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* WEBPACK VAR INJECTION */(function(process) {'use strict';
@@ -27508,13 +27384,13 @@ var CondensedInlinePanel =
 	
 	var _react2 = _interopRequireDefault(_react);
 	
-	var _disposables = __webpack_require__(302);
+	var _disposables = __webpack_require__(304);
 	
-	var _utilsShallowEqual = __webpack_require__(298);
+	var _utilsShallowEqual = __webpack_require__(300);
 	
 	var _utilsShallowEqual2 = _interopRequireDefault(_utilsShallowEqual);
 	
-	var _utilsShallowEqualScalar = __webpack_require__(299);
+	var _utilsShallowEqualScalar = __webpack_require__(301);
 	
 	var _utilsShallowEqualScalar2 = _interopRequireDefault(_utilsShallowEqualScalar);
 	
@@ -27522,7 +27398,7 @@ var CondensedInlinePanel =
 	
 	var _lodashIsPlainObject2 = _interopRequireDefault(_lodashIsPlainObject);
 	
-	var _invariant = __webpack_require__(208);
+	var _invariant = __webpack_require__(210);
 	
 	var _invariant2 = _interopRequireDefault(_invariant);
 	
@@ -27683,7 +27559,7 @@ var CondensedInlinePanel =
 	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(2)))
 
 /***/ },
-/* 302 */
+/* 304 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -27692,32 +27568,32 @@ var CondensedInlinePanel =
 	
 	exports.__esModule = true;
 	
-	var _isDisposable2 = __webpack_require__(303);
+	var _isDisposable2 = __webpack_require__(305);
 	
 	var _isDisposable3 = _interopRequireWildcard(_isDisposable2);
 	
 	exports.isDisposable = _isDisposable3['default'];
 	
-	var _Disposable2 = __webpack_require__(304);
+	var _Disposable2 = __webpack_require__(306);
 	
 	var _Disposable3 = _interopRequireWildcard(_Disposable2);
 	
 	exports.Disposable = _Disposable3['default'];
 	
-	var _CompositeDisposable2 = __webpack_require__(305);
+	var _CompositeDisposable2 = __webpack_require__(307);
 	
 	var _CompositeDisposable3 = _interopRequireWildcard(_CompositeDisposable2);
 	
 	exports.CompositeDisposable = _CompositeDisposable3['default'];
 	
-	var _SerialDisposable2 = __webpack_require__(306);
+	var _SerialDisposable2 = __webpack_require__(308);
 	
 	var _SerialDisposable3 = _interopRequireWildcard(_SerialDisposable2);
 	
 	exports.SerialDisposable = _SerialDisposable3['default'];
 
 /***/ },
-/* 303 */
+/* 305 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -27732,7 +27608,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 304 */
+/* 306 */
 /***/ function(module, exports) {
 
 	"use strict";
@@ -27776,7 +27652,7 @@ var CondensedInlinePanel =
 	module.exports = exports["default"];
 
 /***/ },
-/* 305 */
+/* 307 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -27787,7 +27663,7 @@ var CondensedInlinePanel =
 	
 	exports.__esModule = true;
 	
-	var _isDisposable = __webpack_require__(303);
+	var _isDisposable = __webpack_require__(305);
 	
 	var _isDisposable2 = _interopRequireWildcard(_isDisposable);
 	
@@ -27882,7 +27758,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 306 */
+/* 308 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -27893,7 +27769,7 @@ var CondensedInlinePanel =
 	
 	exports.__esModule = true;
 	
-	var _isDisposable = __webpack_require__(303);
+	var _isDisposable = __webpack_require__(305);
 	
 	var _isDisposable2 = _interopRequireWildcard(_isDisposable);
 	
@@ -27968,7 +27844,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 307 */
+/* 309 */
 /***/ function(module, exports) {
 
 	"use strict";
@@ -27993,7 +27869,7 @@ var CondensedInlinePanel =
 	module.exports = exports["default"];
 
 /***/ },
-/* 308 */
+/* 310 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* WEBPACK VAR INJECTION */(function(process) {'use strict';
@@ -28005,7 +27881,7 @@ var CondensedInlinePanel =
 	
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError('Cannot call a class as a function'); } }
 	
-	var _invariant = __webpack_require__(208);
+	var _invariant = __webpack_require__(210);
 	
 	var _invariant2 = _interopRequireDefault(_invariant);
 	
@@ -28086,7 +27962,7 @@ var CondensedInlinePanel =
 	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(2)))
 
 /***/ },
-/* 309 */
+/* 311 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -28098,7 +27974,7 @@ var CondensedInlinePanel =
 	
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError('Cannot call a class as a function'); } }
 	
-	var _invariant = __webpack_require__(208);
+	var _invariant = __webpack_require__(210);
 	
 	var _invariant2 = _interopRequireDefault(_invariant);
 	
@@ -28184,7 +28060,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 310 */
+/* 312 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -28194,11 +28070,11 @@ var CondensedInlinePanel =
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 	
-	var _wrapConnectorHooks = __webpack_require__(311);
+	var _wrapConnectorHooks = __webpack_require__(313);
 	
 	var _wrapConnectorHooks2 = _interopRequireDefault(_wrapConnectorHooks);
 	
-	var _areOptionsEqual = __webpack_require__(313);
+	var _areOptionsEqual = __webpack_require__(315);
 	
 	var _areOptionsEqual2 = _interopRequireDefault(_areOptionsEqual);
 	
@@ -28278,7 +28154,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 311 */
+/* 313 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -28288,7 +28164,7 @@ var CondensedInlinePanel =
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 	
-	var _utilsCloneWithRef = __webpack_require__(312);
+	var _utilsCloneWithRef = __webpack_require__(314);
 	
 	var _utilsCloneWithRef2 = _interopRequireDefault(_utilsCloneWithRef);
 	
@@ -28350,7 +28226,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 312 */
+/* 314 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -28360,7 +28236,7 @@ var CondensedInlinePanel =
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 	
-	var _invariant = __webpack_require__(208);
+	var _invariant = __webpack_require__(210);
 	
 	var _invariant2 = _interopRequireDefault(_invariant);
 	
@@ -28391,7 +28267,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 313 */
+/* 315 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -28401,7 +28277,7 @@ var CondensedInlinePanel =
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 	
-	var _utilsShallowEqual = __webpack_require__(298);
+	var _utilsShallowEqual = __webpack_require__(300);
 	
 	var _utilsShallowEqual2 = _interopRequireDefault(_utilsShallowEqual);
 	
@@ -28416,7 +28292,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 314 */
+/* 316 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -28426,7 +28302,7 @@ var CondensedInlinePanel =
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 	
-	var _lodashIsArray = __webpack_require__(207);
+	var _lodashIsArray = __webpack_require__(209);
 	
 	var _lodashIsArray2 = _interopRequireDefault(_lodashIsArray);
 	
@@ -28439,7 +28315,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 315 */
+/* 317 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -28450,7 +28326,7 @@ var CondensedInlinePanel =
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 	
-	var _invariant = __webpack_require__(208);
+	var _invariant = __webpack_require__(210);
 	
 	var _invariant2 = _interopRequireDefault(_invariant);
 	
@@ -28458,31 +28334,31 @@ var CondensedInlinePanel =
 	
 	var _lodashIsPlainObject2 = _interopRequireDefault(_lodashIsPlainObject);
 	
-	var _utilsCheckDecoratorArguments = __webpack_require__(296);
+	var _utilsCheckDecoratorArguments = __webpack_require__(298);
 	
 	var _utilsCheckDecoratorArguments2 = _interopRequireDefault(_utilsCheckDecoratorArguments);
 	
-	var _decorateHandler = __webpack_require__(301);
+	var _decorateHandler = __webpack_require__(303);
 	
 	var _decorateHandler2 = _interopRequireDefault(_decorateHandler);
 	
-	var _registerTarget = __webpack_require__(316);
+	var _registerTarget = __webpack_require__(318);
 	
 	var _registerTarget2 = _interopRequireDefault(_registerTarget);
 	
-	var _createTargetFactory = __webpack_require__(317);
+	var _createTargetFactory = __webpack_require__(319);
 	
 	var _createTargetFactory2 = _interopRequireDefault(_createTargetFactory);
 	
-	var _createTargetMonitor = __webpack_require__(318);
+	var _createTargetMonitor = __webpack_require__(320);
 	
 	var _createTargetMonitor2 = _interopRequireDefault(_createTargetMonitor);
 	
-	var _createTargetConnector = __webpack_require__(319);
+	var _createTargetConnector = __webpack_require__(321);
 	
 	var _createTargetConnector2 = _interopRequireDefault(_createTargetConnector);
 	
-	var _utilsIsValidType = __webpack_require__(314);
+	var _utilsIsValidType = __webpack_require__(316);
 	
 	var _utilsIsValidType2 = _interopRequireDefault(_utilsIsValidType);
 	
@@ -28523,7 +28399,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 316 */
+/* 318 */
 /***/ function(module, exports) {
 
 	"use strict";
@@ -28548,7 +28424,7 @@ var CondensedInlinePanel =
 	module.exports = exports["default"];
 
 /***/ },
-/* 317 */
+/* 319 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* WEBPACK VAR INJECTION */(function(process) {'use strict';
@@ -28560,7 +28436,7 @@ var CondensedInlinePanel =
 	
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError('Cannot call a class as a function'); } }
 	
-	var _invariant = __webpack_require__(208);
+	var _invariant = __webpack_require__(210);
 	
 	var _invariant2 = _interopRequireDefault(_invariant);
 	
@@ -28637,7 +28513,7 @@ var CondensedInlinePanel =
 	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(2)))
 
 /***/ },
-/* 318 */
+/* 320 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -28649,7 +28525,7 @@ var CondensedInlinePanel =
 	
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError('Cannot call a class as a function'); } }
 	
-	var _invariant = __webpack_require__(208);
+	var _invariant = __webpack_require__(210);
 	
 	var _invariant2 = _interopRequireDefault(_invariant);
 	
@@ -28727,7 +28603,7 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 319 */
+/* 321 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -28737,11 +28613,11 @@ var CondensedInlinePanel =
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 	
-	var _wrapConnectorHooks = __webpack_require__(311);
+	var _wrapConnectorHooks = __webpack_require__(313);
 	
 	var _wrapConnectorHooks2 = _interopRequireDefault(_wrapConnectorHooks);
 	
-	var _areOptionsEqual = __webpack_require__(313);
+	var _areOptionsEqual = __webpack_require__(315);
 	
 	var _areOptionsEqual2 = _interopRequireDefault(_areOptionsEqual);
 	
@@ -28794,7 +28670,159 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 320 */
+/* 322 */
+/***/ function(module, exports, __webpack_require__) {
+
+	"use strict";
+	var __extends = (this && this.__extends) || function (d, b) {
+	    for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
+	    function __() { this.constructor = d; }
+	    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+	};
+	var React = __webpack_require__(23);
+	var react_dnd_1 = __webpack_require__(201);
+	var react_dnd_html5_backend_1 = __webpack_require__(323);
+	var $ = __webpack_require__(355);
+	var Card_1 = __webpack_require__(200);
+	var Gap_1 = __webpack_require__(356);
+	var CardSet = (function (_super) {
+	    __extends(CardSet, _super);
+	    function CardSet() {
+	        return _super.apply(this, arguments) || this;
+	    }
+	    CardSet.prototype.initGaps = function (forms, onDND, onAdd) {
+	        /* Injects Gap components into an array of rendered cards */
+	        var positionId = 1;
+	        var newForms = [];
+	        // Add the top gap
+	        newForms.push(React.createElement(Gap_1.DroppableGap, { key: 'gap-' + positionId, position: positionId++, dndKey: this.props.dndKey || this.props.formsetPrefix, onDND: onDND, onAdd: onAdd }));
+	        for (var i = 0; i < forms.length; i++) {
+	            newForms.push(forms[i]);
+	            // Add a gap
+	            newForms.push(React.createElement(Gap_1.DroppableGap, { key: 'gap-' + positionId, position: positionId++, dndKey: this.props.dndKey || this.props.formsetPrefix, onDND: onDND, onAdd: onAdd }));
+	        }
+	        return newForms;
+	    };
+	    CardSet.prototype.render = function () {
+	        var _this = this;
+	        var renderedCards = [];
+	        // Sort the forms by their SORT field
+	        var sortedForms = this.props.forms.slice();
+	        if (this.props.sortCompareFunc) {
+	            sortedForms.sort(this.props.sortCompareFunc);
+	        }
+	        var _loop_1 = function (i) {
+	            var form = sortedForms[i];
+	            // Event handlers
+	            var onEditStart = function (e) {
+	                /* Fired when the user clicks the "edit" button on the card */
+	                // Start editing the card
+	                form.isEditing = true;
+	                form.hasChanged = true;
+	                _this.props.store.dispatch({
+	                    type: 'SET_FORM',
+	                    formId: form.id,
+	                    data: form,
+	                });
+	                e.preventDefault();
+	                return false;
+	            };
+	            var onDelete = function (e) {
+	                /* Fired when the user clicks the "delete" button on the card */
+	                // Set "DELETE" field
+	                form.isDeleted = true;
+	                _this.props.store.dispatch({
+	                    type: 'SET_FORM',
+	                    formId: form.id,
+	                    data: form,
+	                });
+	                e.preventDefault();
+	                return false;
+	            };
+	            var onEditClose = function (e, newFields) {
+	                /* Fired when the user clicks the "close" button in the form */
+	                // Save the form data
+	                form.isEditing = false;
+	                form.fields = newFields;
+	                _this.props.store.dispatch({
+	                    type: 'SET_FORM',
+	                    formId: form.id,
+	                    data: form,
+	                });
+	                e.preventDefault();
+	                return false;
+	            };
+	            // Get summary text
+	            var summaryText = $("#" + this_1.props.formsetPrefix + "-" + form.id.toString() + "-image-chooser .preview-image img").attr('alt') || (form.extra ? (form.extra['image'] ? form.extra['image'].title : null) : null) || "";
+	            // Render the card component
+	            renderedCards.push(React.createElement(Card_1.DraggableCard, { key: form.id, formId: form.id, summaryText: summaryText, canEdit: this_1.props.canEdit, canDelete: this_1.props.canDelete, canOrder: this_1.props.canOrder, template: this_1.props.formTemplate, formPrefix: this_1.props.formsetPrefix + "-" + form.id.toString(), fields: form.fields, extra: form.extra, errors: form.errors, deleted: form.isDeleted || false, isEditing: form.isEditing || false, isNew: form.isNew || false, hasChanged: form.hasChanged || false, customiseActions: this_1.props.customiseCardActions, dndKey: this_1.props.dndKey || this_1.props.formsetPrefix, onEditStart: onEditStart, onEditClose: onEditClose, onDelete: onDelete }));
+	        };
+	        var this_1 = this;
+	        for (var i in sortedForms) {
+	            _loop_1(i);
+	        }
+	        // The DND event handler
+	        var onDND = this.props.onDND || (function (formId, position) {
+	            /* Called when a drag and drop action has been performed */
+	            _this.props.store.dispatch({
+	                type: 'MOVE_FORM',
+	                formId: formId,
+	                position: position,
+	            });
+	        });
+	        var onAdd = function (position) {
+	            /* Fired when the user clicks the "add new" button */
+	            var formId = _this.props.forms.length;
+	            // Create the form
+	            _this.props.store.dispatch({
+	                type: 'ADD_FORM',
+	                data: {
+	                    fields: _this.props.emptyForm.fields,
+	                    extra: {
+	                        image: {
+	                            title: ''
+	                        }
+	                    },
+	                    errors: {},
+	                    isNew: true,
+	                    hasChanged: true,
+	                    isEditing: true,
+	                    position: _this.props.forms.length + 1,
+	                    id: formId,
+	                }
+	            });
+	            // Move it into position
+	            _this.props.store.dispatch({
+	                type: 'MOVE_FORM',
+	                formId: formId,
+	                position: position,
+	            });
+	        };
+	        // Add gap objects into the cards
+	        renderedCards = this.initGaps(renderedCards, onDND, onAdd);
+	        // Create an add button if the form isn't orderable
+	        var addButton = null;
+	        if (this.props.canEdit) {
+	            var onClickAddButton = function (e) {
+	                onAdd(1);
+	                e.preventDefault();
+	                return false;
+	            };
+	            addButton = React.createElement("button", { className: "condensed-inline-panel__top-add-button button bicolor icon icon-plus", type: "button", onClick: onClickAddButton }, "Add");
+	        }
+	        return React.createElement("div", null,
+	            addButton,
+	            renderedCards);
+	    };
+	    return CardSet;
+	}(React.Component));
+	exports.CardSet = CardSet;
+	// FIXME: Had to remove type because of https://github.com/gaearon/react-dnd/issues/581
+	exports.DNDCardSet = react_dnd_1.DragDropContext(react_dnd_html5_backend_1.default)(CardSet);
+
+
+/***/ },
+/* 323 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -28806,15 +28834,15 @@ var CondensedInlinePanel =
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 	
-	var _HTML5Backend = __webpack_require__(321);
+	var _HTML5Backend = __webpack_require__(324);
 	
 	var _HTML5Backend2 = _interopRequireDefault(_HTML5Backend);
 	
-	var _getEmptyImage = __webpack_require__(351);
+	var _getEmptyImage = __webpack_require__(354);
 	
 	var _getEmptyImage2 = _interopRequireDefault(_getEmptyImage);
 	
-	var _NativeTypes = __webpack_require__(350);
+	var _NativeTypes = __webpack_require__(353);
 	
 	var NativeTypes = _interopRequireWildcard(_NativeTypes);
 	
@@ -28826,7 +28854,7 @@ var CondensedInlinePanel =
 	}
 
 /***/ },
-/* 321 */
+/* 324 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -28839,25 +28867,25 @@ var CondensedInlinePanel =
 	
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError('Cannot call a class as a function'); } }
 	
-	var _lodashDefaults = __webpack_require__(322);
+	var _lodashDefaults = __webpack_require__(325);
 	
 	var _lodashDefaults2 = _interopRequireDefault(_lodashDefaults);
 	
-	var _shallowEqual = __webpack_require__(342);
+	var _shallowEqual = __webpack_require__(345);
 	
 	var _shallowEqual2 = _interopRequireDefault(_shallowEqual);
 	
-	var _EnterLeaveCounter = __webpack_require__(343);
+	var _EnterLeaveCounter = __webpack_require__(346);
 	
 	var _EnterLeaveCounter2 = _interopRequireDefault(_EnterLeaveCounter);
 	
-	var _BrowserDetector = __webpack_require__(345);
+	var _BrowserDetector = __webpack_require__(348);
 	
-	var _OffsetUtils = __webpack_require__(347);
+	var _OffsetUtils = __webpack_require__(350);
 	
-	var _NativeDragSources = __webpack_require__(349);
+	var _NativeDragSources = __webpack_require__(352);
 	
-	var _NativeTypes = __webpack_require__(350);
+	var _NativeTypes = __webpack_require__(353);
 	
 	var NativeTypes = _interopRequireWildcard(_NativeTypes);
 	
@@ -29407,13 +29435,13 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 322 */
+/* 325 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var apply = __webpack_require__(260),
-	    assignInDefaults = __webpack_require__(323),
-	    assignInWith = __webpack_require__(324),
-	    baseRest = __webpack_require__(257);
+	var apply = __webpack_require__(262),
+	    assignInDefaults = __webpack_require__(326),
+	    assignInWith = __webpack_require__(327),
+	    baseRest = __webpack_require__(259);
 	
 	/**
 	 * Assigns own and inherited enumerable string keyed properties of source
@@ -29445,10 +29473,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 323 */
+/* 326 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var eq = __webpack_require__(235);
+	var eq = __webpack_require__(237);
 	
 	/** Used for built-in method references. */
 	var objectProto = Object.prototype;
@@ -29478,12 +29506,12 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 324 */
+/* 327 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var copyObject = __webpack_require__(325),
-	    createAssigner = __webpack_require__(328),
-	    keysIn = __webpack_require__(331);
+	var copyObject = __webpack_require__(328),
+	    createAssigner = __webpack_require__(331),
+	    keysIn = __webpack_require__(334);
 	
 	/**
 	 * This method is like `_.assignIn` except that it accepts `customizer`
@@ -29522,11 +29550,11 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 325 */
+/* 328 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var assignValue = __webpack_require__(326),
-	    baseAssignValue = __webpack_require__(327);
+	var assignValue = __webpack_require__(329),
+	    baseAssignValue = __webpack_require__(330);
 	
 	/**
 	 * Copies properties of `source` to `object`.
@@ -29568,11 +29596,11 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 326 */
+/* 329 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var baseAssignValue = __webpack_require__(327),
-	    eq = __webpack_require__(235);
+	var baseAssignValue = __webpack_require__(330),
+	    eq = __webpack_require__(237);
 	
 	/** Used for built-in method references. */
 	var objectProto = Object.prototype;
@@ -29602,10 +29630,10 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 327 */
+/* 330 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var defineProperty = __webpack_require__(264);
+	var defineProperty = __webpack_require__(266);
 	
 	/**
 	 * The base implementation of `assignValue` and `assignMergeValue` without
@@ -29633,11 +29661,11 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 328 */
+/* 331 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var baseRest = __webpack_require__(257),
-	    isIterateeCall = __webpack_require__(329);
+	var baseRest = __webpack_require__(259),
+	    isIterateeCall = __webpack_require__(332);
 	
 	/**
 	 * Creates a function like `_.assign`.
@@ -29676,13 +29704,13 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 329 */
+/* 332 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var eq = __webpack_require__(235),
-	    isArrayLike = __webpack_require__(267),
-	    isIndex = __webpack_require__(330),
-	    isObject = __webpack_require__(209);
+	var eq = __webpack_require__(237),
+	    isArrayLike = __webpack_require__(269),
+	    isIndex = __webpack_require__(333),
+	    isObject = __webpack_require__(211);
 	
 	/**
 	 * Checks if the given arguments are from an iteratee call.
@@ -29712,7 +29740,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 330 */
+/* 333 */
 /***/ function(module, exports) {
 
 	/** Used as references for various `Number` constants. */
@@ -29740,12 +29768,12 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 331 */
+/* 334 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var arrayLikeKeys = __webpack_require__(332),
-	    baseKeysIn = __webpack_require__(339),
-	    isArrayLike = __webpack_require__(267);
+	var arrayLikeKeys = __webpack_require__(335),
+	    baseKeysIn = __webpack_require__(342),
+	    isArrayLike = __webpack_require__(269);
 	
 	/**
 	 * Creates an array of the own and inherited enumerable property names of `object`.
@@ -29778,15 +29806,15 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 332 */
+/* 335 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var baseTimes = __webpack_require__(333),
-	    isArguments = __webpack_require__(277),
-	    isArray = __webpack_require__(207),
-	    isBuffer = __webpack_require__(334),
-	    isIndex = __webpack_require__(330),
-	    isTypedArray = __webpack_require__(336);
+	var baseTimes = __webpack_require__(336),
+	    isArguments = __webpack_require__(279),
+	    isArray = __webpack_require__(209),
+	    isBuffer = __webpack_require__(337),
+	    isIndex = __webpack_require__(333),
+	    isTypedArray = __webpack_require__(339);
 	
 	/** Used for built-in method references. */
 	var objectProto = Object.prototype;
@@ -29833,7 +29861,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 333 */
+/* 336 */
 /***/ function(module, exports) {
 
 	/**
@@ -29859,11 +29887,11 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 334 */
+/* 337 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* WEBPACK VAR INJECTION */(function(module) {var root = __webpack_require__(7),
-	    stubFalse = __webpack_require__(335);
+	    stubFalse = __webpack_require__(338);
 	
 	/** Detect free variable `exports`. */
 	var freeExports = typeof exports == 'object' && exports && !exports.nodeType && exports;
@@ -29904,7 +29932,7 @@ var CondensedInlinePanel =
 	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(16)(module)))
 
 /***/ },
-/* 335 */
+/* 338 */
 /***/ function(module, exports) {
 
 	/**
@@ -29928,12 +29956,12 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 336 */
+/* 339 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var baseIsTypedArray = __webpack_require__(337),
-	    baseUnary = __webpack_require__(255),
-	    nodeUtil = __webpack_require__(338);
+	var baseIsTypedArray = __webpack_require__(340),
+	    baseUnary = __webpack_require__(257),
+	    nodeUtil = __webpack_require__(341);
 	
 	/* Node.js helper references. */
 	var nodeIsTypedArray = nodeUtil && nodeUtil.isTypedArray;
@@ -29961,11 +29989,11 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 337 */
+/* 340 */
 /***/ function(module, exports, __webpack_require__) {
 
 	var baseGetTag = __webpack_require__(5),
-	    isLength = __webpack_require__(268),
+	    isLength = __webpack_require__(270),
 	    isObjectLike = __webpack_require__(13);
 	
 	/** `Object#toString` result references. */
@@ -30027,7 +30055,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 338 */
+/* 341 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* WEBPACK VAR INJECTION */(function(module) {var freeGlobal = __webpack_require__(8);
@@ -30056,12 +30084,12 @@ var CondensedInlinePanel =
 	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(16)(module)))
 
 /***/ },
-/* 339 */
+/* 342 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var isObject = __webpack_require__(209),
-	    isPrototype = __webpack_require__(340),
-	    nativeKeysIn = __webpack_require__(341);
+	var isObject = __webpack_require__(211),
+	    isPrototype = __webpack_require__(343),
+	    nativeKeysIn = __webpack_require__(344);
 	
 	/** Used for built-in method references. */
 	var objectProto = Object.prototype;
@@ -30095,7 +30123,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 340 */
+/* 343 */
 /***/ function(module, exports) {
 
 	/** Used for built-in method references. */
@@ -30119,7 +30147,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 341 */
+/* 344 */
 /***/ function(module, exports) {
 
 	/**
@@ -30145,7 +30173,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 342 */
+/* 345 */
 /***/ function(module, exports) {
 
 	"use strict";
@@ -30186,7 +30214,7 @@ var CondensedInlinePanel =
 	module.exports = exports["default"];
 
 /***/ },
-/* 343 */
+/* 346 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -30197,11 +30225,11 @@ var CondensedInlinePanel =
 	
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError('Cannot call a class as a function'); } }
 	
-	var _lodashUnion = __webpack_require__(344);
+	var _lodashUnion = __webpack_require__(347);
 	
 	var _lodashUnion2 = _interopRequireDefault(_lodashUnion);
 	
-	var _lodashWithout = __webpack_require__(212);
+	var _lodashWithout = __webpack_require__(214);
 	
 	var _lodashWithout2 = _interopRequireDefault(_lodashWithout);
 	
@@ -30243,13 +30271,13 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 344 */
+/* 347 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var baseFlatten = __webpack_require__(274),
-	    baseRest = __webpack_require__(257),
-	    baseUniq = __webpack_require__(279),
-	    isArrayLikeObject = __webpack_require__(266);
+	var baseFlatten = __webpack_require__(276),
+	    baseRest = __webpack_require__(259),
+	    baseUniq = __webpack_require__(281),
+	    isArrayLikeObject = __webpack_require__(268);
 	
 	/**
 	 * Creates an array of unique values, in order, from all given arrays using
@@ -30275,7 +30303,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 345 */
+/* 348 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -30284,7 +30312,7 @@ var CondensedInlinePanel =
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 	
-	var _lodashMemoize = __webpack_require__(346);
+	var _lodashMemoize = __webpack_require__(349);
 	
 	var _lodashMemoize2 = _interopRequireDefault(_lodashMemoize);
 	
@@ -30300,10 +30328,10 @@ var CondensedInlinePanel =
 	exports.isSafari = isSafari;
 
 /***/ },
-/* 346 */
+/* 349 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var MapCache = __webpack_require__(215);
+	var MapCache = __webpack_require__(217);
 	
 	/** Error message constants. */
 	var FUNC_ERROR_TEXT = 'Expected a function';
@@ -30379,7 +30407,7 @@ var CondensedInlinePanel =
 
 
 /***/ },
-/* 347 */
+/* 350 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -30391,9 +30419,9 @@ var CondensedInlinePanel =
 	
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
 	
-	var _BrowserDetector = __webpack_require__(345);
+	var _BrowserDetector = __webpack_require__(348);
 	
-	var _MonotonicInterpolant = __webpack_require__(348);
+	var _MonotonicInterpolant = __webpack_require__(351);
 	
 	var _MonotonicInterpolant2 = _interopRequireDefault(_MonotonicInterpolant);
 	
@@ -30479,7 +30507,7 @@ var CondensedInlinePanel =
 	}
 
 /***/ },
-/* 348 */
+/* 351 */
 /***/ function(module, exports) {
 
 	"use strict";
@@ -30596,7 +30624,7 @@ var CondensedInlinePanel =
 	module.exports = exports["default"];
 
 /***/ },
-/* 349 */
+/* 352 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -30614,7 +30642,7 @@ var CondensedInlinePanel =
 	
 	function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
 	
-	var _NativeTypes = __webpack_require__(350);
+	var _NativeTypes = __webpack_require__(353);
 	
 	var NativeTypes = _interopRequireWildcard(_NativeTypes);
 	
@@ -30704,7 +30732,7 @@ var CondensedInlinePanel =
 	}
 
 /***/ },
-/* 350 */
+/* 353 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -30718,7 +30746,7 @@ var CondensedInlinePanel =
 	exports.TEXT = TEXT;
 
 /***/ },
-/* 351 */
+/* 354 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -30739,10 +30767,76 @@ var CondensedInlinePanel =
 	module.exports = exports['default'];
 
 /***/ },
-/* 352 */
+/* 355 */
 /***/ function(module, exports) {
 
 	module.exports = jQuery;
+
+/***/ },
+/* 356 */
+/***/ function(module, exports, __webpack_require__) {
+
+	"use strict";
+	var __extends = (this && this.__extends) || function (d, b) {
+	    for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
+	    function __() { this.constructor = d; }
+	    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+	};
+	var React = __webpack_require__(23);
+	var react_dnd_1 = __webpack_require__(201);
+	var Gap = (function (_super) {
+	    __extends(Gap, _super);
+	    function Gap() {
+	        return _super.apply(this, arguments) || this;
+	    }
+	    /*
+	     * This component fills the gap between cards and is used as a drop target
+	     * and a place for the "add new" button
+	    */
+	    Gap.prototype.drop = function (formId) {
+	        if (this.props.onDND) {
+	            this.props.onDND(formId, this.props.position);
+	        }
+	    };
+	    Gap.prototype.render = function () {
+	        var _this = this;
+	        var classes = ['condensed-inline-panel__gap'];
+	        var gap = null;
+	        if (this.props.isOver) {
+	            classes.push('condensed-inline-panel__gap--over');
+	            gap = React.createElement("div", { className: classes.join(' ') },
+	                React.createElement("div", { className: "condensed-inline-panel__gap-pseudoform" }));
+	        }
+	        else {
+	            var onAdd = function (e) {
+	                _this.props.onAdd(_this.props.position);
+	                e.preventDefault();
+	                return false;
+	            };
+	            gap = React.createElement("div", { className: classes.join(' ') },
+	                React.createElement("a", { className: "condensed-inline-panel__add-button icon icon-plus-inverse", href: "#", onClick: onAdd }));
+	        }
+	        // Hook into react dnd
+	        gap = this.props.connectDropTarget(gap);
+	        return gap;
+	    };
+	    return Gap;
+	}(React.Component));
+	exports.Gap = Gap;
+	var dropTarget = {
+	    drop: function (props, monitor, component) {
+	        console.log(props);
+	        component.drop(monitor.getItem().formId);
+	    }
+	};
+	function dropTargetCollect(connect, monitor) {
+	    return {
+	        connectDropTarget: connect.dropTarget(),
+	        isOver: monitor.canDrop() && monitor.isOver(),
+	    };
+	}
+	exports.DroppableGap = react_dnd_1.DropTarget(function (props) { return props.dndKey; }, dropTarget, dropTargetCollect)(Gap);
+
 
 /***/ }
 /******/ ]);
