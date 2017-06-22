@@ -22879,6 +22879,7 @@ var CondensedInlinePanel =
 	        }
 	        var header = React.createElement("div", { className: "condensed-inline-panel__card-header" },
 	            React.createElement("ul", { className: "condensed-inline-panel__actions" }, this.renderActions()),
+	            React.createElement("img", { src: this.props.thumbnailSrc }),
 	            React.createElement("h2", null, this.props.summaryText));
 	        // Hook into react dnd
 	        header = this.props.connectDragSource(header);
@@ -28753,9 +28754,11 @@ var CondensedInlinePanel =
 	                return false;
 	            };
 	            // Get summary text
-	            var summaryText = $("#" + this_1.props.formsetPrefix + "-" + form.id.toString() + "-image-chooser .preview-image img").attr('alt') || (form.extra ? (form.extra['image'] ? form.extra['image'].title : null) : null) || "";
+	            var $image = $("#" + this_1.props.formsetPrefix + "-" + form.id.toString() + "-image-chooser .preview-image img");
+	            var summaryText = $image.attr('alt') || (form.extra ? (form.extra['image'] ? form.extra['image'].title : null) : null) || "";
+	            var thumbnailSrc = $image.attr('src') || (form.extra ? (form.extra['image'] ? form.extra['image'].preview_image.src : null) : null) || "";
 	            // Render the card component
-	            renderedCards.push(React.createElement(Card_1.DraggableCard, { key: form.id, formId: form.id, summaryText: summaryText, canEdit: this_1.props.canEdit, canDelete: this_1.props.canDelete, canOrder: this_1.props.canOrder, template: this_1.props.formTemplate, formPrefix: this_1.props.formsetPrefix + "-" + form.id.toString(), fields: form.fields, extra: form.extra, errors: form.errors, deleted: form.isDeleted || false, isEditing: form.isEditing || false, isNew: form.isNew || false, hasChanged: form.hasChanged || false, customiseActions: this_1.props.customiseCardActions, dndKey: this_1.props.dndKey || this_1.props.formsetPrefix, onEditStart: onEditStart, onEditClose: onEditClose, onDelete: onDelete }));
+	            renderedCards.push(React.createElement(Card_1.DraggableCard, { key: form.id, formId: form.id, summaryText: summaryText, thumbnailSrc: thumbnailSrc, canEdit: this_1.props.canEdit, canDelete: this_1.props.canDelete, canOrder: this_1.props.canOrder, template: this_1.props.formTemplate, formPrefix: this_1.props.formsetPrefix + "-" + form.id.toString(), fields: form.fields, extra: form.extra, errors: form.errors, deleted: form.isDeleted || false, isEditing: form.isEditing || false, isNew: form.isNew || false, hasChanged: form.hasChanged || false, customiseActions: this_1.props.customiseCardActions, dndKey: this_1.props.dndKey || this_1.props.formsetPrefix, onEditStart: onEditStart, onEditClose: onEditClose, onDelete: onDelete }));
 	        };
 	        var this_1 = this;
 	        for (var i in sortedForms) {
@@ -28780,7 +28783,10 @@ var CondensedInlinePanel =
 	                    fields: _this.props.emptyForm.fields,
 	                    extra: {
 	                        image: {
-	                            title: ''
+	                            title: '',
+	                            preview_image: {
+	                                src: ''
+	                            }
 	                        }
 	                    },
 	                    errors: {},

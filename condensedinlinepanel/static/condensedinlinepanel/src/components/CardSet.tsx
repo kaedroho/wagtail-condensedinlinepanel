@@ -109,12 +109,15 @@ export class CardSet extends React.Component<CardSetProps, {}> {
             };
 
             // Get summary text
-            let summaryText = $(`#${this.props.formsetPrefix}-${form.id.toString()}-image-chooser .preview-image img`).attr('alt') || (form.extra ? (form.extra['image'] ? form.extra['image'].title : null) : null) || "";
+            let $image = $(`#${this.props.formsetPrefix}-${form.id.toString()}-image-chooser .preview-image img`);
+            let summaryText = $image.attr('alt') || (form.extra ? (form.extra['image'] ? form.extra['image'].title : null) : null) || "";
+            let thumbnailSrc = $image.attr('src') || (form.extra ? (form.extra['image'] ? form.extra['image'].preview_image.src : null) : null) || "";
 
             // Render the card component
             renderedCards.push(<DraggableCard key={form.id}
                                      formId={form.id}
                                      summaryText={summaryText}
+                                     thumbnailSrc={thumbnailSrc}
                                      canEdit={this.props.canEdit}
                                      canDelete={this.props.canDelete}
                                      canOrder={this.props.canOrder}
@@ -157,7 +160,10 @@ export class CardSet extends React.Component<CardSetProps, {}> {
                     fields: this.props.emptyForm.fields,
                     extra: {
                         image: {
-                            title: ''
+                            title: '',
+                            preview_image: {
+                                src: ''
+                            }
                         }
                     },
                     errors: {},

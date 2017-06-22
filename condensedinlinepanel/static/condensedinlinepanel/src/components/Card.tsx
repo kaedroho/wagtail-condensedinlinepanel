@@ -14,6 +14,7 @@ export type onDeleteFn = (e: MouseEvent) => boolean;
 export interface CardProps {
     formId: number,
     summaryText: string,
+    thumbnailSrc: string,
     canEdit: boolean,
     canDelete: boolean,
     canOrder: boolean,
@@ -315,6 +316,7 @@ export class Card extends React.Component<CardProps, CardState> {
             <ul className="condensed-inline-panel__actions">
                 {this.renderActions()}
             </ul>
+            <img src={this.props.thumbnailSrc} />
             <h2>{this.props.summaryText}</h2>
         </div>;
 
