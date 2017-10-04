@@ -2,6 +2,8 @@ $color-green: #189370;
 $color-orange: #E9B04D;
 $color-red: #CD3238;
 
+$header-height: 50px;
+$gap-height: 20px;
 
 .condensed-inline-panel {
     // Fix header overlap
@@ -37,11 +39,11 @@ $color-red: #CD3238;
         position: relative;
         padding-left: 1.5em;
         background-color: #fafafa;
-        height: 50px;
+        height: $header-height;
 
         > h2 {
             margin: 0;
-            line-height: 50px;
+            line-height: $header-height;
             text-overflow: ellipsis;
             width: calc(100% - 100px);
         }
@@ -87,7 +89,7 @@ $color-red: #CD3238;
         position: absolute;
         right: 0;
         top: 0;
-        height: 50px;
+        height: $header-height;
     }
 
     &__action {
@@ -95,10 +97,11 @@ $color-red: #CD3238;
         transition: background-color 0.2s ease 0s;
         font-size: 1.7em;
         height: 100%;
-        width: 50px;
+        line-height: $header-height;
+        width: $header-height;
         box-sizing: border-box;
-        padding-top: 0.5em;
         text-align: center;
+        vertical-align: middle;
 
         &:hover {
             cursor: pointer;
@@ -145,7 +148,7 @@ $color-red: #CD3238;
         position: absolute;
         right: 100px;
         width: 250px;
-        line-height: 50px;
+        line-height: $header-height;
         text-align: right;
         padding-left: 1em;
         padding-right: 1em;
@@ -166,6 +169,9 @@ $color-red: #CD3238;
     // Add button
 
     &__gap {
+        height: $gap-height;
+        line-height: $gap-height;
+        vertical-align: middle;
         text-align: right;
     }
 
@@ -208,12 +214,12 @@ $color-red: #CD3238;
     // Drag and drop
 
     &__gap--over {
-        padding-top: 1em;
-        padding-bottom: 1em;
+        padding-top: $gap-height;
+        height: $header-height + $gap-height + 2px;
     }
 
     &__gap-pseudoform {
-        height: 50px;
+        height: $header-height;
         border: 3px dashed #71B2D4;
         box-sizing: border-box;
     }
